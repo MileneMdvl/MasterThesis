@@ -1,0 +1,12 @@
+comparing 2d 3d grid with delaunay.jl 
+divgrad_v1_wrong.jl 
+divgrad_v2_wrong.jl 
+implementations.jl
+random_meshes.jl 
+test_div_grad.jl 
+
+.vscode/ 
+papers/
+figures/
+Research_Proposal.pdf
+
