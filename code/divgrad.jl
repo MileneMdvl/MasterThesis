@@ -1,11 +1,13 @@
-#Third attempt at writing the discrete divergence and gradient 
-#Now: the input functions u,p are vectors which are defined on the vertices of
-#the discrete mesh 
+#File for the discrete divergence and gradient functions. The input variables
+#are tensors such that the velocity and pressure are defined at the face and
+#cell centers respectively. Note, when taking the gradient of the velocity we
+#need to interpolate the velocity at the cell centers. 
 
 #To do: 
 #       - Include the possibility to take tensors in divergence gradient 
 #       - Put equations for average and tensor expansion in a different file 
 #       - Fix average function  
+#       - Include more boundary condition types 
 
 #Variables considered as inputs are: 
 #d:                dimension of the problem (2 or 3)
@@ -16,89 +18,70 @@
 
 include("mesh_functions.jl")
 
-#Function: Average 
-#Input: g Array of size n: function to take the average of 
-#       A Array: cell/face to take the average over 
-#Output: g_A Float: average of g on A
-function Average(g,A)
-    g_A = 0
-    for i in A
-        g_A += g[i] 
-    end
-    g_A *= Volume(A) 
-    return g_A
+
+#Function: Evaluate
+#Input: Tensor G, Array A (either face or cell)
+#Output: G[A], the value of G on A 
+function Evaluate(G,A)
+    ind_A = CartesianIndex(Tuple(A))
+    return G[ind_A]
 end
 
 
-#Need a function to turn vector g into tensor G where e.g. in 2D 
-#G[i,j] has entry iff there is an edge (i,j) (Target dim = 2, type='face')
-
-#Function TensorExpand 
-#Input: g Array of size n: Array to turn into a tensor 
-#       type String: either "cell" or "face"
-#Output: G Tensor of desired dimension
-function TensorExpand(g,type::String)
-    n = length(g)
-    d = length(vertex_list[1])
-    if type == "face" 
-        if d == 2 
-            G = NDSparseArray{Float64}(n, n) 
-            for e in face_list
-                G[e[1],e[2]] = Average(g,e) 
-            end
-        elseif d == 3 
-             G = NDSparseArray{Float64}(n, n, n) 
-            for e in face_list
-                G[e[1],e[2],e[3]] = Average(g,e) 
-            end
-        end
-    elseif type == "cell"
-        if d == 2
-            G = NDSparseArray{Float64}(n, n, n) 
-            for K in cell_list
-                G[K[1],K[2],K[3]] = Average(g,K) 
-            end
-        elseif d == 3 
-             G = NDSparseArray{Float64}(n, n, n, n) 
-            for K in cell_list
-                G[K[1],K[2],K[3],K[4]] = Average(g,K) 
-            end
-        end
-    else 
-        println("Error: incorrect type, should be either 'face' or 'cell'")
-    end
-    return G
-end
-
-
-#Function: Divergence 
-#Input: g Array of size n: function to take the divergence of 
+#Function: DivergenceElement 
+#Input: G Tensor evaluated on face centers: function to take the divergence of 
 #       K Array of size (d+1): cell to take the divergence over
-#Output: div Float: divergence of g on K 
-function Divergence(g,K)
+#Output: div g_K Float: divergence of g on K 
+function DivergenceElement(G,K)
     e_K = Faces(K)
     div = 0 
     for i in eachindex(K)
         e = e_K[i,:]
-        div += Average(g,e) * Volume(e) * NormalIndicator(e,K)
+        div += Evaluate(G,e) * Volume(e) * NormalIndicator(e,K)
     end
     div /= Volume(K) 
     return div
 end
 
+#Function: Divergence
+#Input: G_face Tensor evaluated on face centers 
+#Output: div G Tensor evaluated on cell centers
+function Divergence(G_face)
+    d = length(vertex_list[1])
+    div = NDSparseArray{Float64}(ntuple(i->n,d+1))
+    for K in cell_list
+        ind_K = CartesianIndex(Tuple(K))
+        div[ind_K] = DivergenceElement(G_face,K)
+    end
+    return div
+end
 
 
-#Function Gradient
-#Input: g Array of size n: function to take the gradient of 
+#Function GradientElement
+#Input: G_cell Tensor evaluated on cell centers
 #       e Array of size d: face to take the gradient over
-#Output: grad Float: gradient of g on e 
-function Gradient(g,e)
+#Output: grad Float: gradient of G on e 
+function GradientElement(G_cell,e)
     if e in boundary_list
         println("Error: edge on the boundary")
     end
     #Find the two adjacent triangles 
     adj_cells = Adjacent(e)
     K,L = adj_cells[1,:], adj_cells[2,:]
-    grad = (Average(g,L) - Average(g,K))/DualEdge(e) * NormalIndicator(e,K)
+    grad = (Evaluate(G,L) - Evaluate(G,K))/DualEdge(e) * NormalIndicator(e,K)
+    return grad 
+end
+
+#Function: Gradient
+#Input: G_cell Tensor evaluated on cell centers 
+#Output: grad G Tensor evaluated on face centers
+function Gradient(G_cell)
+    grad = NDSparseArray{Float64}(ntuple(i->n,d))
+    for e in face_list 
+        if e ∉ boundary_list
+            ind_e = CartesianIndex(Tuple(e))
+            grad[ind_e] = GradientElement(G_cell,e)
+        end
+    end
     return grad 
 end

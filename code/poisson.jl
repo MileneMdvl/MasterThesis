@@ -2,57 +2,25 @@
 #load vector to solve the Poisson problem for pressure 
 
 #To do: 
+#      - Finish building the load vector
+#      - Generalise to 3D case
+#      - Make function for Jacobian inverse 
 #      - Clean up file 
 #      - Implement test case 
 
+include("interpolation.jl")
+include("mesh_functions.jl")
+include("divgrad.jl")
 
-#Generalise the function to vectorise an array depending on the dimension 
-#Function Vectorise
-#Input: a, array to vectorise 
-#       type, either cell or face, depending on if a is an array over cells
-#       (e.g. p) or an array over faces (e.g. u)
-#Output: a_vec, vector of a defined on the vertices of the discretisation
-function Vectorise(a,type)
-    np = length(vertex_list)
-    a_vec = zeros(np)
-    for i in 1:np 
-        if type == "cell"
-            n_cells = length(cell_list)
-                num = 0
-                denom = 0
-                for k in 1:n_cells 
-                    K=cell_list[k]
-                    if i in K 
-                        num += a[K[1],K[2],K[3]] * Volume(K) 
-                        denom += Volume(K) 
-                    end
-                end
-        elseif type == "face"
-            n_faces = length(face_list)
-            for i in 1:np 
-                num = 0
-                denom = 0
-                for j in 1:n_faces
-                    e=face_list[j]
-                    if i in e 
-                        num += a[e[1],e[2]] * Volume(e) 
-                        denom += Volume(e) 
-                    end
-                end
-            end
-        else 
-            println("Error: incorrect type, should be either 'cell' or 'face'")
-        end
-        a_vec[i] = num/denom 
-    end
-    return a_vec 
-end
 
 #Build the stiffness matrix A
-function StiffnessMatrix(np)
-    stiff_mat = SparseArrays.spzeros(np,np)
-    for i in 1:np 
-        for j in 1:np 
+#Function StiffnessMatrix
+#Input: n Int: number of vertices 
+#Output: A Array of size nxn, the stiffness matrix 
+function StiffnessMatrix(n)
+    stiff_mat = SparseArrays.spzeros(n,n)
+    for i in 1:n
+        for j in 1:n 
             for k in 1:n_cells 
                 K = cell_list[k]
                 if i in K && j in K 
@@ -66,7 +34,21 @@ function StiffnessMatrix(np)
     return stiff_mat
 end
 
-#Define the Jacobian determinant 
+#Build the stiffness element for entry i,j belonging to cell K 
+#Function BuildStiffElem
+#Input: i,j,K Int
+#Output: A_ij the ij-th element of the stiffness matrix 
+function BuildStiffElem(i,j,K)
+    grad_phi_i = [dphi_dxi_1(i),dphi_dxi_2(i)]
+    grad_phi_j = [dphi_dxi_1(j),dphi_dxi_2(j)]
+    M = [dydxi_2(K) -dydxi_1(K); -dxdxi_2(K) dxdxi_1(K)] 
+    det = JacobianDeterminant(K) 
+    A_ij = 1/2 * 1/det * dot(M * grad_phi_i, M * grad_phi_j)
+    return A_ij
+end
+
+
+#Define the Jacobian determinant on element K
 function JacobianDeterminant(K)
     p = zeros(3,2)
     for i in 1:3 
@@ -76,7 +58,12 @@ function JacobianDeterminant(K)
     return det 
 end
 
-#Define the partial derivatives
+#Define the inverse of the Jacobian on element K 
+function JacobianInverse(K) 
+
+end
+
+#Define the partial derivatives on element K 
 function dxdxi_1(K) 
     return vertex_list[K[1]][1] - vertex_list[K[3]][1]
 end
@@ -92,6 +79,8 @@ end
 function dydxi_2(K) 
     return vertex_list[K[2]][2] - vertex_list[K[3]][2]
 end
+
+#Define the partial derivatives of the shape functions in the reference frame
 
 #∂ϕᵢ / ∂ξ₁
 function dphi_dxi_1(i)
@@ -115,48 +104,23 @@ function dphi_dxi_2(i)
     end
 end
 
-#Build the stiffness element for entry i,j belonging to cell K 
-function BuildStiffElem(i,j,K)
-    grad_phi_i = [dphi_dxi_1(i),dphi_dxi_2(i)]
-    grad_phi_j = [dphi_dxi_1(j),dphi_dxi_2(j)]
-    M = [dydxi_2(K) -dydxi_1(K); -dxdxi_2(K) dxdxi_1(K)] 
-    det = JacobianDeterminant(K) 
-    A_ij = 1/2 * 1/det * dot(M * grad_phi_i, M * grad_phi_j)
-    return A_ij
-end
-
 
 
 #Build the load vector f 
-load_vec = zeros(np)
+load_vec = zeros(n)
 
-function Advection(u)
-    u_vec = Vectorise(u,"face")
-    np = length(u)
-    ∇u = zeros(np,np)
-    for i in 1:np
-        for j in 1:np
-            if [i,j] ∈ face_list
-                ∇u = Gradient()
-            end
-        end
-    end
+#Function: Advection 
+#Input: u_face tensor defined at face centers 
+#Output: u⋅∇u (Advection operator of u) defined at face centers
+function Advection(u_face)
+    #Get the cell interpolation of the face velocity
+    u_cell = FaceToCellInterpolation(u_face)
+    #Gradient of u defined on face centers 
+    gradu = Gradient(u_cell)
+    return SparseInnerProduct(u_face,gradu,"face")
 end
 
 #Build the load element for vertex i belonging to cell K
 function BuildLoadElem(i,K)
-    return 1/2 
-end
-
-#Get the value (average) of u on a cell K 
-function CellAverage(u,K)
-    num = 0
-    denom = 0
-    e_K = Faces(K)
-    for i in eachindex(K)
-        e = e_K[i,:]
-        num += u[e[1],e[2]] * FaceSurface(e) 
-        denom += FaceSurface(e) 
-    end    
-    return num/denom 
+    return 1/2 * Advection(u_face) 
 end

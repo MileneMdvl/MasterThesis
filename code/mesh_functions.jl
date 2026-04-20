@@ -20,6 +20,22 @@ function CyclicPermutations(A)
     return perms 
 end
 
+#Function UniqueList 
+#Input: list Array
+#Output: unique_list Array of unique values of list
+function UniqueList(list)
+    unique_list = copy(list)
+    nn = length(list[1])
+    for i in unique_list
+        ii = CyclicPermutations(i)
+        for i in 1:(nn-1)
+            ind = findall(x->x==(ii[i]),unique_list)
+            deleteat!(unique_list,ind)
+        end
+    end
+    return unique_list
+end
+
 #Function: VerticesCoordinates
 #Input: A Array of vertices: cell or face 
 #Output: P Array of points: coordinates of vertices of A 
@@ -89,18 +105,22 @@ function VolumeTetrahedron(p₁, p₂, p₃, p₄)
 end
 
 #Function: Circumcenter 
-#Input:  K Vector of size n: cell 
+#Input:  A Vector of size nn (face or cell)
 #Output: c Array: coordinates of circumcenter 
 #if 2D: c = [cx, cy], if 3D: c = [cx, cy, cz]
-function Circumcenter(K)
-    d = length(K) - 1
+function Circumcenter(A)
+    nn = length(A)
 
     #Get coordinates of points 
-    p₁ = vertex_list[K[1]]
-    p₂ = vertex_list[K[2]]
-    p₃ = vertex_list[K[3]]
+    p₁ = vertex_list[A[1]]
+    p₂ = vertex_list[A[2]]
 
-    if d == 2 
+    #If A has two indices it is a line
+    if nn == 2
+        return [p₁[1]+p₂[1], p₁[1]+p₂[1]]/2
+    #If A has three indices then it is a triangle
+    elseif nn == 3 
+        p₃ = vertex_list[A[3]]
         p = [p₁, p₂, p₃]
         Matx = Matrix{Float64}(undef, 3, 3)
         Maty = Matrix{Float64}(undef, 3, 3)
@@ -123,8 +143,10 @@ function Circumcenter(K)
         a = det(Mata)
         return [-bx, -by]/(2*a)
 
-    elseif d == 3
-        p₄ = vertex_list[K[4]]
+    # If A has four indices it is a tetrahedron
+    elseif nn == 4
+        p₃ = vertex_list[A[3]]
+        p₄ = vertex_list[A[4]]
         p = [p₁, p₂, p₃, p₄]
         Matx = Matrix{Float64}(undef, 4, 4)
         Maty = Matrix{Float64}(undef, 4, 4)
@@ -252,22 +274,6 @@ function NormalIndicator(e,K)
         indicator = 0
     end
     return indicator
-end
-
-#Function UniqueList 
-#Input: list Array
-#Output: unique_list Array of unique values of list
-function UniqueList(list)
-    unique_list = copy(list)
-    nn = length(list[1])
-    for i in unique_list
-        ii = CyclicPermutations(i)
-        for i in 1:(nn-1)
-            ind = findall(x->x==(ii[i]),unique_list)
-            deleteat!(unique_list,ind)
-        end
-    end
-    return unique_list
 end
 
 

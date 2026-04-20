@@ -13,7 +13,7 @@ using CairoMakie, GLMakie
 using Random, Distributions
 using NDimensionalSparseArrays, SparseArrays
 include("mesh_functions.jl")
-include("divgrad_v3.jl")
+include("divgrad.jl")
 
 n_inside = 1
 n_bnd = Int(floor(n_inside/10))
@@ -89,27 +89,9 @@ vertex_list = collect(mesh.points[i,:] for i in 1:size(mesh.points,1))
 nothing
 
 ##
-include("divgrad_v3.jl")
-println("Using v3")
+include("divgrad.jl")
 
 n = length(vertex_list)
-
-u = zeros(n)
-p = zeros(n)
-for i in 1:n 
-    u[i] = 1
-    p[i] = vertex_list[i][1]
-end
-
-p_cell = TensorExpand(p,"cell")
-u_face = TensorExpand(u,"face")
-
-nothing
-
-##
-include("divgrad_v3.jl")
-println("Using v3")
-
 u_face = NDSparseArray{Float64}(n, n) 
 for e in face_list
     u_face[e[1],e[2]] = dot(vertex_list[e[1]],vertex_list[e[2]])
@@ -122,7 +104,6 @@ p_cell = NDSparseArray{Float64}(n, n, n)
 for K in cell_list
     p_cell[K[1],K[2],K[3]] = vertex_list[K[1]][1]
 end
-
 
 #Function Vectorise
 #Input: G Tensor 
@@ -150,26 +131,38 @@ end
 p = Vectorise(p_cell)
 u = Vectorise(u_face)
 
-divu = NDSparseArray{Float64}(n, n, n) 
+d=2
+divu = NDSparseArray{Float64}(ntuple(i->n,d+1)) 
 for K in cell_list
-    divu[K[1],K[2],K[3]] = Divergence(u,K)
+    ind_K = CartesianIndex(Tuple(K))
+    divu[ind_K] = Divergence(u_face,K)
 end 
 
-gradp = NDSparseArray{Float64}(n, n) 
+gradp = NDSparseArray{Float64}(ntuple(i->n,d))
 for e in face_list 
     if e ∉ boundary_list
-        gradp[e[1],e[2]] = Gradient(p,e)
+        ind_e = CartesianIndex(Tuple(e))
+        gradp[ind_e] = Gradient(p_cell,e)
     end
 end
-
 
 
 println("(p,div(u))ₖ   = ",SparseInnerProduct(p_cell,divu,"cell"))
 println("-(u,grad(p))ₑ = ",-SparseInnerProduct(u_face,gradp,"face"))
 
+##
+include("interpolation.jl")
+u_cell = FaceToCellInterpolation(u_face)
+
+# println(u_cell)
+
+u_face_2 = CellToFaceInterpolation(u_cell)
+println(u_face)
+println(u_face_2)
+
 
 ##
-include("divgrad_v2.jl")
+include("divgrad_v2_wrong.jl")
 println("Using v2")
 
 divu_2 = NDSparseArray{Float64}(n, n, n) 
@@ -210,25 +203,40 @@ for i in eachindex(gradp)
 end
 
 ## 
-include("divgrad_v3.jl")
+include("divgrad.jl")
+n = length(vertex_list)
 u_face = NDSparseArray{Float64}(n, n) 
 for e in face_list
-    u_face[e[1],e[2]] = 0
+    u_face[e[1],e[2]] = 1
     if e in boundary_list 
         u_face[e[1],e[2]] = 0
     end
 end
-u_face[1,2] = 1
-u_face[2,1] = 1
+# u_face[1,2] = 1
+# u_face[2,1] = 1
 
 u = Vectorise(u_face)
+
+# bnd_vertices = collect([bnd[i,:] for i in 1:size(bnd)[1]])
+# for i in eachindex(u)
+#     xᵢ = vertex_list[i]
+#     if xᵢ in bnd_vertices
+#         u[i] = 0
+#     end
+# end
+
+
 println("Vector u: ",u)
 u_face_2 = TensorExpand(u,"face")
+for e in boundary_list
+    u_face_2[e[1],e[2]] = 0
+end
 
 
 println("Comparing the tensors u")
 for i in eachindex(u_face)
     if hasindex(u_face,i)
+        println(i)
         println("T1: ",u_face[i])
         println("T2: ",u_face_2[i])
         println(" ")
