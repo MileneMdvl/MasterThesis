@@ -1,17 +1,15 @@
 #File to test the functions in mesh_functions and divgrad files 
 #To do: 
 #      - Clean up this file 
-#      - Fix issue with average 
+#      - Fix error in RHS Poisson (problem in dimensions)
 #      - Also try on 3D mesh 
-#      - Implement Poisson equation files 
-#      - Move vectorise function in a different file
 
 
-using Meshes, CoordRefSystems, Unitless
+using Meshes
 using Delaunay, GeometryBasics
 using CairoMakie, GLMakie
 using Random, Distributions
-using NDimensionalSparseArrays, SparseArrays
+using NDimensionalSparseArrays
 include("mesh_functions.jl")
 include("divgrad.jl")
 
@@ -92,7 +90,7 @@ nothing
 include("divgrad.jl")
 
 n = length(vertex_list)
-u_face = NDSparseArray{Float64}(n, n) 
+u_face = NDSparseArray{Float64}(n, n)
 for e in face_list
     u_face[e[1],e[2]] = dot(vertex_list[e[1]],vertex_list[e[2]])
     if e in boundary_list 
@@ -100,152 +98,31 @@ for e in face_list
     end
 end
 
-p_cell = NDSparseArray{Float64}(n, n, n) 
+p_cell = NDSparseArray{Float64}(n, n, n)
 for K in cell_list
     p_cell[K[1],K[2],K[3]] = vertex_list[K[1]][1]
 end
 
-#Function Vectorise
-#Input: G Tensor 
-#Output: g Vector: average of G on each vertex
-function Vectorise(G)
-    n = length(vertex_list)
-    g = zeros(n)
-    for i in 1:n 
-        num = 0
-        denom = 0
-        for j in eachindex(G)
-            if hasindex(G,j)
-                ind = collect(Tuple.(j))
-                if i in ind
-                    num += G[j] * Volume(ind)
-                    denom += Volume(ind)
-                end
-            end
-        end
-        g[i] = num/denom 
-    end
-    return g
-end
-
-p = Vectorise(p_cell)
-u = Vectorise(u_face)
-
 d=2
-divu = NDSparseArray{Float64}(ntuple(i->n,d+1)) 
-for K in cell_list
-    ind_K = CartesianIndex(Tuple(K))
-    divu[ind_K] = Divergence(u_face,K)
-end 
+divu = Divergence(u_face)
+gradp = Gradient(p_cell)
 
-gradp = NDSparseArray{Float64}(ntuple(i->n,d))
-for e in face_list 
-    if e ∉ boundary_list
-        ind_e = CartesianIndex(Tuple(e))
-        gradp[ind_e] = Gradient(p_cell,e)
-    end
-end
-
+include("sparse_operations.jl")
 
 println("(p,div(u))ₖ   = ",SparseInnerProduct(p_cell,divu,"cell"))
 println("-(u,grad(p))ₑ = ",-SparseInnerProduct(u_face,gradp,"face"))
 
 ##
 include("interpolation.jl")
-u_cell = FaceToCellInterpolation(u_face)
-
-# println(u_cell)
-
-u_face_2 = CellToFaceInterpolation(u_cell)
-println(u_face)
-println(u_face_2)
-
-
-##
-include("divgrad_v2_wrong.jl")
-println("Using v2")
-
-divu_2 = NDSparseArray{Float64}(n, n, n) 
-for K in cell_list
-    divu_2[K[1],K[2],K[3]] = Divergence_v2(u_face,K)
-end 
-
-gradp_2 = NDSparseArray{Float64}(n, n) 
-for e in face_list 
-    if e ∉ boundary_list
-        gradp_2[e[1],e[2]] = Gradient_v2(p_cell,e)
-    end
-end
-
-println("(p,div(u))ₖ   = ",SparseInnerProduct(p_cell,divu_2,"cell"))
-println("-(u,grad(p))ₑ = ",-SparseInnerProduct(u_face,gradp_2,"face"))
-
-##
-println("divergence of u")
-for i in eachindex(divu)
-    if hasindex(divu,i)
-        println("v3: ",divu[i])
-        println("v2: ",divu_2[i])
-        println(" ")
-    end
-end
-
-println("----------------------------")
-
-println("gradient of p")
-
-for i in eachindex(gradp)
-    if hasindex(gradp,i)
-        println("v3: ",gradp[i])
-        println("v2: ",gradp_2[i])
-        println(" ")
-    end
-end
-
-## 
-include("divgrad.jl")
+include("poisson.jl")
 n = length(vertex_list)
-u_face = NDSparseArray{Float64}(n, n) 
-for e in face_list
-    u_face[e[1],e[2]] = 1
-    if e in boundary_list 
-        u_face[e[1],e[2]] = 0
-    end
-end
-# u_face[1,2] = 1
-# u_face[2,1] = 1
+A = StiffnessMatrix(n)
+f = LoadVector(n,u_face)
 
-u = Vectorise(u_face)
-
-# bnd_vertices = collect([bnd[i,:] for i in 1:size(bnd)[1]])
-# for i in eachindex(u)
-#     xᵢ = vertex_list[i]
-#     if xᵢ in bnd_vertices
-#         u[i] = 0
-#     end
-# end
+##
+include("sparse_operations.jl")
+b = ones(n)
+SparseMatVec(u_face,b)
 
 
-println("Vector u: ",u)
-u_face_2 = TensorExpand(u,"face")
-for e in boundary_list
-    u_face_2[e[1],e[2]] = 0
-end
-
-
-println("Comparing the tensors u")
-for i in eachindex(u_face)
-    if hasindex(u_face,i)
-        println(i)
-        println("T1: ",u_face[i])
-        println("T2: ",u_face_2[i])
-        println(" ")
-    end
-end
-
-# unique_face = UniqueList(face_list)
-# for i in eachindex(unique_face)
-#     println(unique_face[i])
-#     println(Volume(unique_face[i]))
-# end
 

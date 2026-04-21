@@ -68,7 +68,7 @@ function GradientElement(G_cell,e)
     #Find the two adjacent triangles 
     adj_cells = Adjacent(e)
     K,L = adj_cells[1,:], adj_cells[2,:]
-    grad = (Evaluate(G,L) - Evaluate(G,K))/DualEdge(e) * NormalIndicator(e,K)
+    grad = (Evaluate(G_cell,L) - Evaluate(G_cell,K))/DualEdge(e) * NormalIndicator(e,K)
     return grad 
 end
 

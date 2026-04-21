@@ -11,6 +11,7 @@
 include("interpolation.jl")
 include("mesh_functions.jl")
 include("divgrad.jl")
+include("sparse_operations.jl")
 
 
 #Build the stiffness matrix A
@@ -18,12 +19,11 @@ include("divgrad.jl")
 #Input: n Int: number of vertices 
 #Output: A Array of size nxn, the stiffness matrix 
 function StiffnessMatrix(n)
-    stiff_mat = SparseArrays.spzeros(n,n)
+    stiff_mat = zeros(n,n)
     for i in 1:n
         for j in 1:n 
-            for k in 1:n_cells 
-                K = cell_list[k]
-                if i in K && j in K 
+            for K in cell_list
+                if i in K && j in K && i != j
                     index_i = findall(x->x==i,K)[1]
                     index_j = findall(x->x==j,K)[1]
                     stiff_mat[i,j] += BuildStiffElem(index_i,index_j,K)
@@ -31,7 +31,7 @@ function StiffnessMatrix(n)
             end
         end
     end
-    return stiff_mat
+    return NDSparseArray(stiff_mat)
 end
 
 #Build the stiffness element for entry i,j belonging to cell K 
@@ -39,75 +39,174 @@ end
 #Input: i,j,K Int
 #Output: A_ij the ij-th element of the stiffness matrix 
 function BuildStiffElem(i,j,K)
-    grad_phi_i = [dphi_dxi_1(i),dphi_dxi_2(i)]
-    grad_phi_j = [dphi_dxi_1(j),dphi_dxi_2(j)]
-    M = [dydxi_2(K) -dydxi_1(K); -dxdxi_2(K) dxdxi_1(K)] 
-    det = JacobianDeterminant(K) 
-    A_ij = 1/2 * 1/det * dot(M * grad_phi_i, M * grad_phi_j)
+    J = Jacobian(K)
+    invJ = inv(J)
+    detJ = det(J) 
+    A_ij =  dot(invJ * GradPhi(i), invJ * GradPhi(j)) * detJ
+    #Normalise depending on the dimension 
+    d = length(vertex_list[1])
+    if d == 2
+        A_ij *= 1/2
+    elseif d == 3
+        A_ij *= 1/6
+    end
     return A_ij
 end
 
 
-#Define the Jacobian determinant on element K
-function JacobianDeterminant(K)
-    p = zeros(3,2)
-    for i in 1:3 
-        p[i,:] = vertex_list[K[i]]
+#Define the Jacobian on element K
+function Jacobian(K)
+    #Get d*d Jacobian matrix, for d the dimension of the domain 
+    d = length(vertex_list[1])
+    J = zeros(d,d)
+    J[1,1] = dxdxi_1(K)
+    J[1,2] = dydxi_1(K)
+    J[2,1] = dxdxi_2(K)
+    J[2,2] = dydxi_2(K)
+    if d == 3 
+        J[1,3] = dzdxi_1(K)
+        J[2,3] = dzdxi_2(K)
+        J[3,1] = dxdxi_3(K)
+        J[3,2] = dydxi_3(K)
+        J[3,3] = dzdxi_3(K)
     end
-    det = (p[1,1]-p[3,1])*(p[2,2]-p[3,2])-(p[2,1]-p[3,1])*(p[1,2]-p[3,2])
-    return det 
+    return J 
 end
 
-#Define the inverse of the Jacobian on element K 
-function JacobianInverse(K) 
-
-end
 
 #Define the partial derivatives on element K 
 function dxdxi_1(K) 
-    return vertex_list[K[1]][1] - vertex_list[K[3]][1]
+    d = length(vertex_list[1])
+    last_ind = d+1
+    return vertex_list[K[1]][1] - vertex_list[K[last_ind]][1]
 end
 
 function dydxi_1(K) 
-    return vertex_list[K[1]][2] - vertex_list[K[3]][2]
+    d = length(vertex_list[1])
+    last_ind = d+1
+    return vertex_list[K[1]][2] - vertex_list[K[last_ind]][2]
+end
+
+function dzdxi_1(K)
+    return vertex_list[K[1]][3] - vertex_list[K[4]][3]
 end
 
 function dxdxi_2(K) 
-    return vertex_list[K[2]][1] - vertex_list[K[3]][1]
+    d = length(vertex_list[1])
+    last_ind = d+1
+    return vertex_list[K[2]][1] - vertex_list[K[last_ind]][1]
 end
 
 function dydxi_2(K) 
-    return vertex_list[K[2]][2] - vertex_list[K[3]][2]
+    d = length(vertex_list[1])
+    last_ind = d+1
+    return vertex_list[K[2]][2] - vertex_list[K[last_ind]][2]
 end
 
-#Define the partial derivatives of the shape functions in the reference frame
+function dzdxi_2(K)
+    return vertex_list[K[2]][3] - vertex_list[K[4]][3]
+end
+
+function dxdxi_3(K) 
+    return vertex_list[K[3]][1] - vertex_list[K[4]][1]
+end
+
+function dydxi_3(K) 
+    return vertex_list[K[3]][2] - vertex_list[K[4]][2]
+end
+
+function dzdxi_3(K)
+    return vertex_list[K[3]][3] - vertex_list[K[4]][3]
+end
+
+#Define the gradient of the i-th shape function in the reference frame
+function GradPhi(i)
+    d = length(vertex_list[1])
+    if d == 2
+        return [dphi_dxi_1(i),dphi_dxi_2(i)]
+    elseif d ==3   
+        return [dphi_dxi_1(i),dphi_dxi_2(i),dphi_dxi_3(i)]
+    end
+end
 
 #∂ϕᵢ / ∂ξ₁
 function dphi_dxi_1(i)
+    d = length(vertex_list[1])
     if i == 1
         return 1
     elseif i == 2
         return 0 
-    elseif i == 3 
+    elseif i == 3 && d == 2 
+        return -1 
+    elseif i == 3 && d == 3
+        return 0 
+    elseif i == 4 
         return -1 
     end
 end
 
 #∂ϕᵢ / ∂ξ₂
 function dphi_dxi_2(i)
+    d = length(vertex_list[1])
     if i == 1
         return 0
     elseif i == 2
         return 1 
+    elseif i == 3 && d == 2 
+        return -1 
+    elseif i == 3 && d == 3
+        return 0 
+    elseif i == 4 
+        return -1 
+    end
+end
+
+#∂ϕᵢ / ∂ξ₃
+function dphi_dxi_3(i)
+    if i == 1
+        return 0
+    elseif i == 2
+        return 0 
     elseif i == 3 
+        return 1 
+    elseif i == 4 
         return -1 
     end
 end
 
 
-
 #Build the load vector f 
-load_vec = zeros(n)
+function LoadVector(n,u_face,rho=1)
+    load_vec = zeros(n)
+    for i in 1:n 
+        for K in cell_list 
+            if i ∈ K 
+                load_vec[i] += BuildLoadElem(i,K,u_face,rho)
+            end
+        end
+    end
+    return load_vec
+end
+
+#Build the load element for vertex i belonging to cell K
+function BuildLoadElem(i,K,u_face,rho)
+    J = Jacobian(K)
+    invJ = inv(J)
+    detJ = det(J) 
+    adv = Advection(u_face)
+    grad_phi = GradPhi(i)
+    println(adv)
+    println(invJ*grad_phi)
+    f_i = -rho * detJ * dot(adv, invJ * grad_phi)
+    d = length(vertex_list[1])
+    if d == 2
+        f_i *= 1/2
+    elseif d == 3
+        f_i *= 1/6
+    end
+    return f_i 
+end
+
 
 #Function: Advection 
 #Input: u_face tensor defined at face centers 
@@ -117,10 +216,8 @@ function Advection(u_face)
     u_cell = FaceToCellInterpolation(u_face)
     #Gradient of u defined on face centers 
     gradu = Gradient(u_cell)
-    return SparseInnerProduct(u_face,gradu,"face")
+    u_vert = VertexInterpolation(u_face)
+    return SparseVecMat(u_vert, gradu)
 end
 
-#Build the load element for vertex i belonging to cell K
-function BuildLoadElem(i,K)
-    return 1/2 * Advection(u_face) 
-end
+
