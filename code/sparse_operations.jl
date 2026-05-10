@@ -1,6 +1,17 @@
 #This file includes the operations for sparse matrices, namely: 
+# - Evaluate
 # - SparseInnerProduct
 # - SparseMatVec 
+
+include("mesh_functions.jl")
+
+#Function: Evaluate
+#Input: Tensor G, Array A (either face or cell)
+#Output: G[A], the value of G on A 
+function Evaluate(G,A)
+    ind_A = CartesianIndex(Tuple(A))
+    return G[ind_A]
+end
 
 #Function SparseInnerProduct
 #Input A,B: sparse arrays to compute the inner product of
@@ -49,13 +60,50 @@ function SparseInnerProduct(A,B, type::String)
     return innerprod                
 end
 
+#Function InnerProdCell 
+#Input: a, b Vector defined on cell centers 
+#       C Vector of size nc: list of cells 
+#Output: Discrete inner product a⋅b 
+function InnerProdCell(a,b,C)
+    ip = 0
+    nc = length(C)
+    if length(a) == length(b) == nc 
+        for i in 1:nc 
+            ip += Volume(C[i]) * a[i] * b[i]
+        end
+    else
+        println("Error: incorrect vector lengths, should correspond to the number of cells, ", nc)
+        printltn("Otherwise try 'InnerProdFace'")
+    end
+    return ip
+end
+
+#Function InnerProdFace 
+#Input: a, b Vector defined on face centers 
+#       F Vector of size nf: list of (unique) faces 
+#Output: Discrete inner product a⋅b 
+function InnerProdFace(a,b,F)
+    ip = 0
+    nf = length(F)
+    if length(a) == length(b) == nf
+        for i in 1:nf 
+            e = F[i]
+            ip += Volume(e) * DualEdge(e) * a[i] * b[i]
+        end
+    else
+        println("Error: incorrect vector lengths, should correspond to the number of unique faces, ", nf)
+        println("Otherwise try 'InnerProdCell'")
+    end
+    return ip
+end
+
 
 #Function SparseMatVec
 #Input: A Sparse Matrix 
 #       b Sparse/Dense Vector 
 #Output: Ab Vector, result of A*b
 function SparseMatVec(A,b)
-    Ab = zeros(size(b))
+    Ab = zeros(size(A)[1])
     #Get indices in which A is nonzero
     ind_nzA = findnz(A)[1]
     #Store b as a sparse vector 
@@ -63,6 +111,7 @@ function SparseMatVec(A,b)
     ind_nzb = findnz(bb)[1] 
     for ij in ind_nzA
         i,j = Tuple(ij)
+        j = CartesianIndex(j)
         if j in ind_nzb
             Ab[i] += A[ij] * b[j]
         end

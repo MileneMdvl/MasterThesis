@@ -190,21 +190,7 @@ end
 
 #Build the load element for vertex i belonging to cell K
 function BuildLoadElem(i,K,u_face,rho)
-    J = Jacobian(K)
-    invJ = inv(J)
-    detJ = det(J) 
-    adv = Advection(u_face)
-    grad_phi = GradPhi(i)
-    println(adv)
-    println(invJ*grad_phi)
-    f_i = -rho * detJ * dot(adv, invJ * grad_phi)
-    d = length(vertex_list[1])
-    if d == 2
-        f_i *= 1/2
-    elseif d == 3
-        f_i *= 1/6
-    end
-    return f_i 
+    
 end
 
 
@@ -216,8 +202,20 @@ function Advection(u_face)
     u_cell = FaceToCellInterpolation(u_face)
     #Gradient of u defined on face centers 
     gradu = Gradient(u_cell)
-    u_vert = VertexInterpolation(u_face)
-    return SparseVecMat(u_vert, gradu)
+    # u_vert = VertexInterpolation(u_face)
+    return SparseInnerProduct(u_face, gradu,"face")
 end
 
-
+#Function phi 
+#Input: i Int: index of the vertex of the cell K (1,2,3 or 4 if 3D)
+#       K Array: Cell vertices 
+function phi(K,i)
+    d = length(vertex_list[1])
+    M = zeros(d+1,d+1)
+    for j in 1:(d+1)
+        M[j,1:d] = vertex_list[K[j]]
+        M[j,d+1] = 1
+    end
+    c = inv(M)[i,:]
+    
+end

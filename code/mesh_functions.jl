@@ -185,8 +185,9 @@ end
 #Input: e Vector of size (n-1): primal face
 #Output: |ê| Scalar: length of dual edge 
 function DualEdge(e)
+    #If edge on the boundary of the domain, then there is no dual edge 
+    #hence, |ê| = 0
     if e in boundary_list
-        println("Error: face e on boundary, no dual edge!")
         return 0
     end 
     #Get the labels for the two adjacent cells  
@@ -208,6 +209,21 @@ function Faces(K)
        e_K[i,:] = KK[i][1:d]
     end
     return e_K
+end
+
+#Function isFace
+#Input: e Vector of size d: face
+#       K Vector of size (d+1): cell 
+#Output: Boolean, true if e ∈ ∂K 
+function isFace(e,K)
+    e_K = Faces(K)
+    istrue = false
+    for k in 1:3 
+        if e in CyclicPermutations(e_K[k,:])
+            istrue = true
+        end
+    end
+    return istrue 
 end
 
 #Function: Adjacent 
