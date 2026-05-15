@@ -4,9 +4,9 @@ divgrad_v2_wrong.jl
 implementations.jl
 random_meshes.jl 
 test_div_grad.jl 
-poisson.jl
+code/poisson.jl
 
-.vscode/ 
+.vscode/ git add .
 papers/
 figures/
 Research_Proposal.pdf
