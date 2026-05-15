@@ -188,7 +188,7 @@ function DualEdge(e)
     #If edge on the boundary of the domain, then there is no dual edge 
     #hence, |ê| = 0
     if e in boundary_list
-        return 0
+        return 0 
     end 
     #Get the labels for the two adjacent cells  
     adjacent_cells = Adjacent(e)
@@ -206,7 +206,17 @@ function Faces(K)
     KK = CyclicPermutations(K)
     e_K = zeros(Int,d+1,2)
     for i in 1:(d+1) 
-       e_K[i,:] = KK[i][1:d]
+        e = KK[i][1:d] 
+        if e in face_list
+            e_K[i,:] = e
+        else 
+            ee = CyclicPermutations(e)
+            for e in ee 
+                if e in face_list
+                    e_K[i,:] = e 
+                end
+            end
+        end
     end
     return e_K
 end
@@ -224,6 +234,30 @@ function isFace(e,K)
         end
     end
     return istrue 
+end
+
+#Function: WithVertex
+#Input: v Int: vertex label
+#       type String: either 'cell' or 'face'
+#Output: A Array of cells/faces with vertex i 
+function WithVertex(v,type::String)
+    local list = []
+    if type == "cell"
+        for K in cell_list
+            if v in K 
+                push!(list,K)
+            end
+        end
+    elseif type == "face"
+        for e in face_list 
+            if v in e 
+                push!(list,e)
+            end
+        end
+    else 
+        println("Error: type should either be 'cell' or 'face'")
+    end
+    return list 
 end
 
 #Function: Adjacent 
@@ -249,6 +283,27 @@ function Adjacent(e)
     return adjacent_cells
 end
 
+#Function: NormalVector
+#Input: e Vector of size d: face 
+#Output: nₑ normal vector to face e 
+function NormalVector(e)
+    d = length(e)
+    if d == 2 
+        #Get the two points that make the edge
+        p₁ = vertex_list[e[1]]
+        p₂ = vertex_list[e[2]]
+        #Get the normal to the line
+        nor = nullspace((p₂ - p₁)')
+    elseif d == 3
+        #Get the three points that make up the triangle face
+        p₁ = vertex_list[e[1]]
+        p₂ = vertex_list[e[2]]
+        p₃ = vertex_list[e[3]]
+        #Compute normal to tringle face e 
+        nor = cross((p₂-p₁),(p₃-p₁))
+    end
+    return vec(nor)
+end
 
 #Function: NormalIndicator 
 #Input: e Vector of size d: face on cell K 
@@ -259,27 +314,22 @@ function NormalIndicator(e,K)
     d = length(e)
     #Check if e is a face 
     if e ⊆ K
+        nor = NormalVector(e)
         if d == 2 
-            #Get the two points that make the edge
-            p₁ = vertex_list[e[1]]
+            #Get one of the two points that make the edge
             p₂ = vertex_list[e[2]]
             #Find the third points of the triangle
             p₃ = vertex_list[K[(!in).(K,Ref(e))][]]
-            #Get the normal to the line
-            nor = nullspace((p₂ - p₁)')
+
             #The normal is outward if the dot product with the third point is negative
             indicator = - sign(dot(nor,(p₃ - p₂)))
 
         elseif d == 3
-            #Get the three points that make up the triangle face
-            p₁ = vertex_list[e[1]]
-            p₂ = vertex_list[e[2]]
+            #Get on of the three points that make up the triangle face
             p₃ = vertex_list[e[3]]
             #Find the fourth point of the tetrahedron
             p₄ = vertex_list[K[(!in).(K,Ref(e))][]]
 
-            #Compute normal to tringle face e 
-            nor = cross((p₂-p₁),(p₃-p₁))
             #Check if p₄ is behind the triangle or in front of it
             #if it is behind then n is outward normal 
             #so we compute the dot product, the indicator will then be minus the sign 
@@ -291,3 +341,4 @@ function NormalIndicator(e,K)
     end
     return indicator
 end
+

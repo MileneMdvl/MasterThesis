@@ -4,6 +4,7 @@ divgrad_v2_wrong.jl
 implementations.jl
 random_meshes.jl 
 test_div_grad.jl 
+poisson.jl
 
 .vscode/ 
 papers/

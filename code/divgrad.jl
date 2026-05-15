@@ -1,5 +1,7 @@
 #File to build the discrete divergence and gradient as matrix operators 
 
+#Inputs for all functions are list of cells, faces and boundary faces 
+
 include("mesh_functions.jl")
 
 #Function: Divergence 
@@ -43,3 +45,23 @@ function Gradient(C,F,BF)
     return G
 end
 
+#Function Convection 
+#Input: uf face-centred velocity 
+#       phi_c cell-centred vector to take the convection of 
+#Output: conv, the discretisation of u⋅∇ϕ 
+function Convection(uf,phi_c)
+    nc = length(cell_list)
+    conv = zeros(nc)
+    #Compute the gradient of phi_c 
+    Gphi_c = SparseMatVec(G,phi_c)
+    for i in 1:nc 
+        local K = cell_list[i]
+        local e_K = Faces(K)
+        for k in 1:3
+            e = e_K[k,:]
+            ind_e = findall(x->x==e, face_list)[1]
+            conv[i] += DualEdge(e) * Volume(e) * uf[ind_e] * Gphi_c[ind_e]
+        end
+    end
+    return conv 
+end

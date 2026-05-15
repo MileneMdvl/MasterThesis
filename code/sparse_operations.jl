@@ -62,32 +62,30 @@ end
 
 #Function InnerProdCell 
 #Input: a, b Vector defined on cell centers 
-#       C Vector of size nc: list of cells 
 #Output: Discrete inner product a⋅b 
-function InnerProdCell(a,b,C)
+function InnerProdCell(a,b)
     ip = 0
-    nc = length(C)
+    nc = length(cell_list)
     if length(a) == length(b) == nc 
         for i in 1:nc 
-            ip += Volume(C[i]) * a[i] * b[i]
+            ip += Volume(cell_list[i]) * a[i] * b[i]
         end
     else
         println("Error: incorrect vector lengths, should correspond to the number of cells, ", nc)
-        printltn("Otherwise try 'InnerProdFace'")
+        println("Otherwise try 'InnerProdFace'")
     end
     return ip
 end
 
 #Function InnerProdFace 
-#Input: a, b Vector defined on face centers 
-#       F Vector of size nf: list of (unique) faces 
+#Input: a, b Vector defined on face centers  
 #Output: Discrete inner product a⋅b 
-function InnerProdFace(a,b,F)
+function InnerProdFace(a,b)
     ip = 0
-    nf = length(F)
+    nf = length(face_list)
     if length(a) == length(b) == nf
         for i in 1:nf 
-            e = F[i]
+            e = face_list[i]
             ip += Volume(e) * DualEdge(e) * a[i] * b[i]
         end
     else
@@ -137,4 +135,27 @@ function SparseVecMat(b,A)
         end
     end
     return bA
+end
+
+#Function SparseMatMat
+#Input: A Sparse matrix
+#       B Sparse Matrix  
+#Output: AB Vector, result of A*B
+function SparseMatMat(A,B)
+    local n,p,m = size(A)[1], size(A)[2], size(B)[2]
+    if size(B)[1] != p
+        println("Error: matrix dimensions do not match!")
+        return 
+    end
+    AB = zeros(n,m)
+    for i in 1:n 
+        for j in 1:m 
+            for k in 1:p 
+                if hasindex(A,i,k) && hasindex(B,k,j)
+                    AB[i,j] += A[i,k] * B[k,j]
+                end
+            end
+        end
+    end
+    return NDSparseArray(AB)
 end

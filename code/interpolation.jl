@@ -4,78 +4,97 @@
 # - face centers to cell centers 
 # - cell centers to face centers
 
-#Is cell to face interpolation needed? Also, need to take into account the
-#boundary faces 
+#Inputs are lists of vertices (V), cells (C), faces (F) and boundary faces (BF)
 
 include("mesh_functions.jl")
 
 #Function: VertexInterpolation
-#Input: G Tensor to interpolate 
-#Output: g Vector evaluated at vertices 
-function VertexInterpolation(G)
-    n = length(vertex_list)
-    g = zeros(n)
-    for i in 1:n 
+#Input: phi, vector of either cell-centred of face-centred values 
+#Output: phi_v, vector of values at vertices 
+function VertexInterpolation(phi)
+    nn = length(phi) #either nn = nc or nn = nf 
+    phi_v = zeros(nv)
+    if nn == length(cell_list)
+        type = "cell"
+        local list = cell_list
+    elseif  nn == length(face_list)
+        type = "face"
+        local list = face_list
+    else 
+        println("Error: vector to be interpolated should be defined on cell-centres of face-centres")
+        return 
+    end
+    for i in 1:nv 
+        list_with_vertex = WithVertex(i,type)
         num = 0
-        denom = 0   
-        for j in eachindex(G)
-            if hasindex(G,j)
-                ind = collect(Tuple.(j))
-                if i in ind
-                    num += G[j] * Volume(ind)
-                    denom += Volume(ind)
-                end
+        denom = 0
+        for j in 1:nn
+            A = list[j]
+            if A in list_with_vertex 
+                num += phi[j] * Volume(A) 
+                denom += Volume(A)
             end
         end
-        g[i] = num/denom 
+        phi_v[i] = num/denom 
     end
-    return g
+    return phi_v 
 end
 
 
 #Function FaceToCellInterpolation
-#Input: G_face Tensor defined on face centers to interpolate
-#Output: G_cell Tensor of interpolation at cell centers
-function FaceToCellInterpolation(G_face)
-    #dimension d of the problem 
-    d = length(vertex_list[1])
-    #Initialise the cell interpolation tensor 
-    G_cell = NDSparseArray{Float64}(ntuple(i->n,d+1))
-    for K in cell_list
-        e_K = Faces(K)
-        num = 0
-        denom = 0
-        for i in eachindex(K)
-            e = e_K[i,:]
-            ind_e = CartesianIndex(Tuple(e))
-            num += G_face[ind_e] * Volume(e)
-            denom += Volume(e)
+#Input: phi_f, face-centred vector 
+#Output: phi_c, cell-centred vector 
+function FaceToCellInterpolation(phi_f)
+    nf = length(face_list)
+    nc = length(cell_list)
+    #Get dimension of the problem
+    d = length(face_list[1])
+    phi_c = zeros(nc,d)
+    if nf != length(phi_f)
+        println("Error: vector not defined on face-centres")
+    else 
+        for i in 1:nc 
+            K = cell_list[i]
+            num = [0; 0]
+            denom = 0
+            for j in 1:nf 
+                e = face_list[j] 
+                if isFace(e,K)
+                    num += phi_f[j] * Volume(e) * NormalVector(e)
+                    denom += Volume(e)
+                end
+            end
+            phi_c[i,:] = num/denom 
         end
-        ind_K = CartesianIndex(Tuple(K))
-        G_cell[ind_K] = num / denom
     end
-    return G_cell
+    return phi_c 
 end
 
-
-
-function CellToFaceInterpolation(G_cell)
-    d = length(vertex_list[1])
-    G_face = NDSparseArray{Float64}(ntuple(i->n,d))
-    for e in face_list
-        adj_cells = Adjacent(e)
+#Function FaceToCellInterpolation
+#Input:  phi_c, cell-centred matrix, of dimension nc * d 
+#        where d is the dimension of the problem 
+#Output: phi_f, face-centred vector
+function CellToFaceInterpolation(phi_c)
+    d = length(face_list[1])
+    nf = length(face_list)
+    nc = length(cell_list)
+    if phi_c isa Vector || size(phi_c)[1] != nc
+        println("Error: input should be a matrix of dimension ",(nc,d))
+        return 
+    end
+    phi_f = zeros(nf)
+    for i in 1:nf 
+        e = face_list[i]
         num = 0
         denom = 0
-        for i in 1:2 
-            K = adj_cells[i,:]
-            if 0 ∉ K 
-                ind_K = CartesianIndex(Tuple(K))
-                num += G_cell[ind_K] * Volume(K) 
+        for j in 1:nc 
+            K = cell_list[j]
+            if isFace(e,K)
+                num += dot(phi_c[j,:],NormalVector(e)) * Volume(K)
                 denom += Volume(K) 
             end
         end
-        ind_e = CartesianIndex(Tuple(e))
-        G_face[ind_e] = num/denom 
+        phi_f[i] = num/denom 
     end
-    return G_face
+    return phi_f 
 end
