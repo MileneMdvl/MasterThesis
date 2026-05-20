@@ -8,7 +8,9 @@ using Meshes
 using Delaunay, GeometryBasics
 using CairoMakie, GLMakie
 using Random, Distributions
-using NDimensionalSparseArrays
+using SparseArrays
+
+import LinearSolve as LS
 
 include("mesh_functions.jl")
 include("divgrad.jl")
@@ -17,11 +19,11 @@ include("interpolation.jl")
 
 ##
 
-n_inside = 1
+n_inside = 10
 n_bnd = Int(floor(n_inside/10))
 
 points = rand(Uniform(0,1),n_inside,2)
-points = [0.4 0.7]
+# points = [0.4 0.7]
 bnd = [0 0; 0 1; 1 0; 1 1]
 
 #Place points on boundary if needed 
@@ -119,12 +121,12 @@ end
 D = Divergence(cell_list,face_list)
 G = Gradient(cell_list,face_list,boundary_list)
 #Laplacian 
-L = SparseMatMat(D,G)
+Laplacian = sparse(SparseMatMat(D,G))
 
 nothing
 
 #%% 
-
+include("sparse_operations.jl")
 Duf = SparseMatVec(D,uf)
 Gpc = SparseMatVec(G,pc)
 
@@ -133,14 +135,26 @@ println("-(u,grad(p))ₑ = ",-InnerProdFace(uf,Gpc))
 
 #%%
 nu = 1 #viscosity
+rho = 1 #density
 dt = 0.1 #timestep 
 
-L = SparseMatMat(D,G)
+#number of timesteps 
+Nt = 10
 
-uc = FaceToCellInterpolation(uf)
-uc_x = uc[:,1]
-uc_y = uc[:,2]
+for t in 1:Nt 
+    uc = FaceToCellInterpolation(uf)
 
-# u_intermediate_x = uc_x + dt * Convection(uf,uc_x) + nu * dt * SparseMatVec(L,uc_x)
-nothing 
+    #Intermediate velocity
+    u_star_c = uc + dt * Convection(uf,uc) + nu * dt * SparseMatMat(Laplacian,uc)
+
+    #Solve the Poisson pressure problem 
+    u_star_f = CellToFaceInterpolation(u_star_c)
+    RHS = rho/dt * SparseMatVec(D,u_star_f)
+    prob = LS.LinearProblem(-Laplacian,RHS)
+    sol = LS.solve(prob)
+    local pc = sol.u 
+
+    #Update velocity 
+    uc = u_star_c + dt/rho * FaceToCellInterpolation(SparseMatVec(G,pc))
+end
 

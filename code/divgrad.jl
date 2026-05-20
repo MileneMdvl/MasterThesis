@@ -11,7 +11,7 @@ include("mesh_functions.jl")
 function Divergence(C, F)
     nc = length(C)
     nf = length(F)
-    D = NDSparseArray{Float64}(nc, nf)
+    D = spzeros(nc,nf)
     for i in 1:nc 
         for j in 1:nf 
             K = C[i]
@@ -32,7 +32,7 @@ end
 function Gradient(C,F,BF)
     nc = length(C)
     nf = length(F)
-    G = NDSparseArray{Float64}(nf,nc)
+    G = spzeros(nf,nc)
     for i in 1:nf
         for j in 1:nc
             K = C[j]
@@ -51,16 +51,20 @@ end
 #Output: conv, the discretisation of u⋅∇ϕ 
 function Convection(uf,phi_c)
     nc = length(cell_list)
-    conv = zeros(nc)
+    conv = zeros(size(phi_c))
     #Compute the gradient of phi_c 
-    Gphi_c = SparseMatVec(G,phi_c)
+    if phi_c isa Vector 
+        Gphi_c = SparseMatVec(G,phi_c)
+    elseif phi_c isa Matrix 
+        Gphi_c = SparseMatMat(G,phi_c)
+    end
     for i in 1:nc 
         local K = cell_list[i]
         local e_K = Faces(K)
         for k in 1:3
             e = e_K[k,:]
             ind_e = findall(x->x==e, face_list)[1]
-            conv[i] += DualEdge(e) * Volume(e) * uf[ind_e] * Gphi_c[ind_e]
+            conv[i,:] += DualEdge(e) * Volume(e) * uf[ind_e] * Gphi_c[ind_e,:]
         end
     end
     return conv 

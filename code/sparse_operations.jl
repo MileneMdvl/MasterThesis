@@ -40,10 +40,13 @@ function SparseInnerProduct(A,B, type::String)
 
     innerprod = 0
 
+    ind_nzA = findall(!iszero, A)
+    ind_nzB = findall(!iszero, B)
+
     for i in eachindex(A)
             ind = collect(Tuple.(i))
             if ind in indices_to_sum 
-                if hasindex(A,i) && hasindex(B,i)
+                if i in ind_nzA && i in ind_nzB
                     entry = A[i] * B[i] * Volume(ind) 
                     if type == "face"
                         entry *= DualEdge(ind)
@@ -103,13 +106,10 @@ end
 function SparseMatVec(A,b)
     Ab = zeros(size(A)[1])
     #Get indices in which A is nonzero
-    ind_nzA = findnz(A)[1]
-    #Store b as a sparse vector 
-    bb = NDSparseArray(b)
-    ind_nzb = findnz(bb)[1] 
+    ind_nzA = findall(!iszero, A)
+    ind_nzb = findall(!iszero, b)
     for ij in ind_nzA
         i,j = Tuple(ij)
-        j = CartesianIndex(j)
         if j in ind_nzb
             Ab[i] += A[ij] * b[j]
         end
@@ -124,10 +124,8 @@ end
 function SparseVecMat(b,A)
     bA = zeros(size(b))
     #Get indices in which A is nonzero
-    ind_nzA = findnz(A)[1]
-    #Store b as a sparse array for the sake of dimensions 
-    bb = NDSparseArray(b)
-    ind_nzb = findnz(bb)[1] 
+    ind_nzA = findall(!iszero, A)
+    ind_nzb = findall(!iszero, b)
     for ij in ind_nzA
         i,j = Tuple(ij)
         if i in ind_nzb
@@ -138,24 +136,38 @@ function SparseVecMat(b,A)
 end
 
 #Function SparseMatMat
-#Input: A Sparse matrix
-#       B Sparse Matrix  
+#Input: AA (Sparse) matrix
+#       BB (Sparse) Matrix
+#       Note the matrices don't have to be both sparse, but if both are dense
+#       then it would be better to use built in matrix multiplication  
 #Output: AB Vector, result of A*B
 function SparseMatMat(A,B)
     local n,p,m = size(A)[1], size(A)[2], size(B)[2]
+    if A isa Array 
+        AA = sparse(A)
+    else
+        AA = copy(A)
+    end 
+    if B isa Array 
+        BB = sparse(B)
+    else 
+        BB = copy(B)
+    end
     if size(B)[1] != p
         println("Error: matrix dimensions do not match!")
         return 
     end
     AB = zeros(n,m)
+    ind_nzA = findall(!iszero, A)
+    ind_nzB = findall(!iszero, B)
     for i in 1:n 
         for j in 1:m 
             for k in 1:p 
-                if hasindex(A,i,k) && hasindex(B,k,j)
-                    AB[i,j] += A[i,k] * B[k,j]
+                if CartesianIndex(i,k) in ind_nzA && CartesianIndex(k,j) in ind_nzB
+                    AB[i,j] += AA[i,k] * BB[k,j]
                 end
             end
         end
     end
-    return NDSparseArray(AB)
+    return AB
 end
