@@ -5,7 +5,6 @@ implementations.jl
 random_meshes.jl 
 test_div_grad.jl 
 poisson.jl
-manufactured_sol.jl
 
 .vscode/ 
 papers/

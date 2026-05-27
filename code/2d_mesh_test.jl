@@ -19,11 +19,11 @@ include("interpolation.jl")
 
 ##
 
-n_inside = 10
+n_inside = 1
 n_bnd = Int(floor(n_inside/10))
 
-points = rand(Uniform(0,1),n_inside,2)
-# points = [0.4 0.7]
+# points = rand(Uniform(0,1),n_inside,2)
+points = [0.4 0.7]
 bnd = [0 0; 0 1; 1 0; 1 1]
 
 #Place points on boundary if needed 
@@ -88,14 +88,12 @@ vertex_list = collect(mesh.points[i,:] for i in 1:size(mesh.points,1))
 # set_theme!(theme_latexfonts())
 # fig = Figure()
 # ax = Axis(fig[1,1],title="2D triangulated mesh with $(length(points)) vertices")
-# wireframe!(ax,m,transparency = true)
-# scatter!(ax,points)
+# Makie.wireframe!(ax,m,transparency = true)
+# Makie.scatter!(ax,points)
 
 # display(fig)
 
 # save("figures/2dtriangles_vertexlabels.pdf",fig,pt_per_unit=1)
-
-nothing
 
 ##
 
@@ -103,58 +101,77 @@ nf = length(face_list)
 nc = length(cell_list)
 nv = length(vertex_list)
 
-uf = zeros(nf)
-for i in 1:nf
-    #Set the boundary condition that u vanishes at the boundary 
-    if face_list[i] ∈ boundary_list
-        uf[i] = 0
-    else
-        uf[i] = rand(Float16)
-    end
-end
-
-pc = zeros(nc) 
-for i in 1:nc
-    pc[i] = rand(Float16)
-end
-
 D = Divergence(cell_list,face_list)
 G = Gradient(cell_list,face_list,boundary_list)
 #Laplacian 
 Laplacian = sparse(SparseMatMat(D,G))
 
-nothing
-
-#%% 
-include("sparse_operations.jl")
-Duf = SparseMatVec(D,uf)
-Gpc = SparseMatVec(G,pc)
-
-println("(p,div(u))ₖ   = ",InnerProdCell(pc,Duf))
-println("-(u,grad(p))ₑ = ",-InnerProdFace(uf,Gpc))
 
 #%%
-nu = 1 #viscosity
-rho = 1 #density
-dt = 0.1 #timestep 
+#Implementing the manufactured solution 
+include("manufactured_sol.jl")
+
+#Collect the xy coordinates of cell centers 
+xc = zeros(nc)
+yc = zeros(nc)
+for i = 1:nc 
+    K = cell_list[i]
+    local p = Circumcenter(K)
+    xc[i] = p[1]
+    yc[i] = p[2]
+end
+
+#Initialise the manufactured solution 
+#Also get the solution to Navier-Stokes for comparison 
+uc0 = zeros(nc,2)
+rho = zeros(nc)
+fc = zeros(nc, 2)
+for i = 1:nc
+    uc0[i,1] = u_eval(xc[i],yc[i])
+    uc0[i,2] = v_eval(xc[i],yc[i])
+    rho[i] = rho_eval(xc[i],yc[i])
+    fc[i,1] = f_x(xc[i],yc[i])
+    fc[i,2] = f_y(xc[i],yc[i])
+end
+
+uc = copy(uc0)
+
+#Also store the density as a matrix, where rho[i,1] = rho[i,2]
+#for i the cell index 
+rho2 = reshape(transpose(repeat(rho,2)),nc,2)
 
 #number of timesteps 
-Nt = 10
+Nt = 100
+dt = 1/Nt #timestep 
+
+error = zeros(Nt)
+
+Re = 1600
 
 for t in 1:Nt 
-    uc = FaceToCellInterpolation(uf)
-
+    uf = CellToFaceInterpolation(uc)
     #Intermediate velocity
-    u_star_c = uc + dt * Convection(uf,uc) + nu * dt * SparseMatMat(Laplacian,uc)
+    u_star_c = uc - dt * Convection(uf,uc) + dt/Re * SparseMatMat(Laplacian,uc) + dt * fc
 
     #Solve the Poisson pressure problem 
     u_star_f = CellToFaceInterpolation(u_star_c)
-    RHS = rho/dt * SparseMatVec(D,u_star_f)
-    prob = LS.LinearProblem(-Laplacian,RHS)
+    RHS = 1/dt * SparseMatVec(D,u_star_f) 
+    prob = LS.LinearProblem(Laplacian,RHS)
     sol = LS.solve(prob)
     local pc = sol.u 
 
     #Update velocity 
-    uc = u_star_c + dt/rho * FaceToCellInterpolation(SparseMatVec(G,pc))
+    global uc = u_star_c - dt * FaceToCellInterpolation(SparseMatVec(G,pc))
+
+    error[t] = norm(uc-uc0,2)
+    println((t,error[t]))
 end
 
+CairoMakie.activate!()
+set_theme!(theme_latexfonts())
+fig = Figure(fontsize = 16)
+ax = Axis(fig[1,1],title="Error for manufactured solution",
+    xlabel = "Time iterates",
+    ylabel = L"||u_c - u_0||_2")
+Makie.lines!(ax,error,linewidth=2)
+display(fig)
