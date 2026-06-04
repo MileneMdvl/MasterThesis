@@ -1,101 +1,32 @@
 #File to test the functions in mesh_functions and divgrad files 
 #To do: 
-#      - Fix error in RHS Poisson (problem in dimensions)
+#      - Implement manufactured solution
 #      - Also try on 3D mesh 
 
 
-using Meshes
-using Delaunay, GeometryBasics
-using CairoMakie, GLMakie
-using Random, Distributions
+# using Meshes
+# using Delaunay, GeometryBasics
+using CairoMakie, GLMakie, LaTeXStrings
+# using Random, Distributions
 using SparseArrays
-
+using ProgressBars
 import LinearSolve as LS
 
 include("mesh_functions.jl")
 include("divgrad.jl")
 include("sparse_operations.jl")
 include("interpolation.jl")
+include("manufactured_sol.jl")
 
 ##
 
-n_inside = 1
-n_bnd = Int(floor(n_inside/10))
+include("build_mesh.jl")
 
-# points = rand(Uniform(0,1),n_inside,2)
-points = [0.4 0.7]
-bnd = [0 0; 0 1; 1 0; 1 1]
+num_pts = 20
 
-#Place points on boundary if needed 
-for j in 1:2
-    if j ==  1
-        k = 1
-    elseif j == 2
-        k = 4
-    end
-    points_bnd = rand(Uniform(0,1),n_bnd,2)
-    [points_bnd[i,1] = bnd[k,1] for i in 1:n_bnd]
-    global bnd = vcat(bnd,points_bnd)
+vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(num_pts,true)
 
-    points_bnd = rand(Uniform(0,1),n_bnd,2)
-    [points_bnd[i,2] = bnd[k,2] for i in 1:n_bnd]
-    global bnd = vcat(bnd,points_bnd)
-end
-
-points = vcat(points,bnd)
-
-mesh = Delaunay.delaunay(points)
-
-tris = [GeometryBasics.TriangleFace(mesh.simplices[i, :]...) for i in 1:size(mesh.simplices, 1)]
-points = Makie.to_vertices(mesh.points)
-m = GeometryBasics.Mesh(points, tris) 
-
-
-lines = GeometryBasics.decompose(LineFace{Int}, tris)
-
-#Store the faces 
-#First store all cyclic permuations of faces 
-face_list = collect([lines[i][1], lines[i][2]] for i in 1:size(lines,1))
-face_list = UniqueList(face_list)
-
-#Store the boundary faces 
-#First store all cyclic permutations of boundary faces 
-boundary_list = collect(mesh.convex_hull[i,:] for i in 1:size(mesh.convex_hull,1))
-for e in boundary_list
-    ee = CyclicPermutations(e)
-    for i in eachindex(e)
-        if ee[i] ∉ boundary_list
-            push!(boundary_list,ee[i])
-        end
-    end
-end
-#Then, only keep those which are in the same order as in the list of faces 
-ind = []
-for i in eachindex(boundary_list)
-    local e = boundary_list[i]
-    if e ∉ face_list
-        push!(ind,i)
-    end
-end
-deleteat!(boundary_list,ind)
-boundary_list = UniqueList(boundary_list)
-
-cell_list = collect(mesh.simplices[i,:] for i in 1:size(mesh.simplices,1))
-vertex_list = collect(mesh.points[i,:] for i in 1:size(mesh.points,1))
-
-
-# CairoMakie.activate!()
-# set_theme!(theme_latexfonts())
-# fig = Figure()
-# ax = Axis(fig[1,1],title="2D triangulated mesh with $(length(points)) vertices")
-# Makie.wireframe!(ax,m,transparency = true)
-# Makie.scatter!(ax,points)
-
-# display(fig)
-
-# save("figures/2dtriangles_vertexlabels.pdf",fig,pt_per_unit=1)
-
-##
+include("divgrad.jl")
 
 nf = length(face_list)
 nc = length(cell_list)
@@ -103,17 +34,26 @@ nv = length(vertex_list)
 
 D = Divergence(cell_list,face_list)
 G = Gradient(cell_list,face_list,boundary_list)
+
+# StaggeredVol = spzeros(nf,nf)
+# for i = 1:nf 
+#     e = face_list[i]
+#     StaggeredVol[i,i] = 1/Volume(e)
+# end
+# G = - StaggeredVol * transpose(D)
+
+# G = -transpose(D)
 #Laplacian 
-Laplacian = sparse(SparseMatMat(D,G))
+Laplacian = D*G
 
-
-#%%
-#Implementing the manufactured solution 
-include("manufactured_sol.jl")
-
-#Collect the xy coordinates of cell centers 
+# #%%
+# #Implementing the manufactured solution 
+#Collect the xy coordinates of cell centers and face centers
 xc = zeros(nc)
 yc = zeros(nc)
+xf = zeros(nf)
+yf = zeros(nf)
+
 for i = 1:nc 
     K = cell_list[i]
     local p = Circumcenter(K)
@@ -121,57 +61,154 @@ for i = 1:nc
     yc[i] = p[2]
 end
 
+for i=1:nf 
+    e = face_list[i]
+    local p = Circumcenter(e)
+    xf[i] = p[1]
+    yf[i] = p[2]
+end
+
 #Initialise the manufactured solution 
 #Also get the solution to Navier-Stokes for comparison 
 uc0 = zeros(nc,2)
-rho = zeros(nc)
+pc0 = zeros(nc)
+# rho = zeros(nc)
 fc = zeros(nc, 2)
 for i = 1:nc
     uc0[i,1] = u_eval(xc[i],yc[i])
     uc0[i,2] = v_eval(xc[i],yc[i])
-    rho[i] = rho_eval(xc[i],yc[i])
+    # rho[i] = rho_eval(xc[i],yc[i])
     fc[i,1] = f_x(xc[i],yc[i])
     fc[i,2] = f_y(xc[i],yc[i])
+    pc0[i] = p_eval(xc[i],yc[i])
 end
 
+# include("interpolation.jl")
+# uf0 = CellToFaceInterpolation(uc0)
+
+# println(D*uf0)
+# # println(G*uc0)
+
+# uf0 = zeros(nf,2)
+# for i = 1:nf 
+#     uf0[i,1] = u_eval(xf[i],yf[i])
+#     uf0[i,2] = v_eval(xf[i],yf[i])
+# end
+
+# function Divergence2(uf)
+#     Duf = zeros(nc)
+#     for i in 1:nc 
+#         K = cell_list[i]
+#         for j in 1:nf 
+#             e = face_list[j]
+#             if isFace(e,K)
+#                 Duf[i] +=  Volume(e) * dot(NormalVector(e),uf[j,:]) * NormalIndicator(e,K)
+#             end 
+#         end
+#         Duf[i] /= Volume(K)
+#     end
+#     return Duf
+# end
+
+# println((Divergence2(uf0)))
+
+# uf02 = zeros(nf)
+# for i = 1:nf 
+#     e = face_list[i]
+#     uf02[i] = dot(uf0[i,:],NormalVector(e))
+# end
+# println(D*uf02)
+
+#%%
+dt = 5e-5
+Nt = trunc(Int,1/dt)
+
+norm_u = zeros(Nt)
+
+norm_div = zeros(Nt)
+where_max = zeros(Nt)
+
 uc = copy(uc0)
-
-#Also store the density as a matrix, where rho[i,1] = rho[i,2]
-#for i the cell index 
-rho2 = reshape(transpose(repeat(rho,2)),nc,2)
-
-#number of timesteps 
-Nt = 100
-dt = 1/Nt #timestep 
-
-error = zeros(Nt)
-
-Re = 1600
-
-for t in 1:Nt 
+include("interpolation.jl")
+for t in tqdm(1:Nt)
     uf = CellToFaceInterpolation(uc)
-    #Intermediate velocity
-    u_star_c = uc - dt * Convection(uf,uc) + dt/Re * SparseMatMat(Laplacian,uc) + dt * fc
+
+    # norm_div[t] = maximum(abs.((D*uf)))
+    norm_div[t] = norm(D*uf)
+    where_max[t] = argmax(abs.((D*uf)))
+
+    #Intermediate Velocity
+    u_star_c = uc - dt * Convection(uf,uc) + dt/Re * Laplacian*uc + dt*fc 
+    # u_star_c = zeros(nc,2)
+    
 
     #Solve the Poisson pressure problem 
     u_star_f = CellToFaceInterpolation(u_star_c)
-    RHS = 1/dt * SparseMatVec(D,u_star_f) 
+    RHS = 1/dt * D*u_star_f
+    # RHS = 1/dt * Divergence2(u_star_f)
     prob = LS.LinearProblem(Laplacian,RHS)
     sol = LS.solve(prob)
     local pc = sol.u 
 
     #Update velocity 
-    global uc = u_star_c - dt * FaceToCellInterpolation(SparseMatVec(G,pc))
+    global uc = u_star_c - dt * FaceToCellInterpolation(G*pc)
 
-    error[t] = norm(uc-uc0,2)
-    println((t,error[t]))
+    norm_u[t] = norm(uc-uc0)
 end
+
+println("Nt = ",Nt)
+println(norm_u[end])
+println(norm_div[end])
 
 CairoMakie.activate!()
 set_theme!(theme_latexfonts())
+
 fig = Figure(fontsize = 16)
-ax = Axis(fig[1,1],title="Error for manufactured solution",
+ax = Axis(fig[1,1],title=latexstring("\\text{Velocity norm, } Re=$(Re),\\ dt=$(dt)"),
+    # yscale=log10,
     xlabel = "Time iterates",
-    ylabel = L"||u_c - u_0||_2")
-Makie.lines!(ax,error,linewidth=2)
+    ylabel = L"||u_c-u_0||_2")
+Makie.lines!(ax,norm_u,linewidth=2)
 display(fig)
+
+fig = Figure(fontsize = 16)
+ax = Axis(fig[1,1],title=latexstring("\\text{Velocity divergence max, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices}"), 
+    yscale=log10,
+    xlabel = "Time iterates",
+    ylabel = L"||Du_f||_2")
+Makie.lines!(ax,norm_div,linewidth=2)
+display(fig)
+
+# fig = Figure(fontsize = 16)
+# ax = Axis(fig[1,1],title=latexstring("\\text{Location of maximum, } Re=$(Re),\\ dt=$(dt)"),
+#     xlabel = "Time iterates",
+#     ylabel = L"||Du_f||_2")
+# Makie.scatter!(ax,where_max)
+# display(fig)
+
+#%%
+
+# include("divgrad.jl")
+
+# g = zeros(nc)
+# for i = 1:nc 
+#     g[i] = xc[i]^2
+# end
+# dg = zeros(nf)
+# for i = 1:nf 
+#     dg[i] = xf[i] * 2
+# end
+
+# # println(g)
+# # println(dg)
+# G = Gradient(cell_list,face_list,boundary_list)
+# # println(G*g)
+# println(norm(G*g-dg))
+# StaggeredVol = spzeros(nf,nf)
+# for i = 1:nf 
+#     e = face_list[i]
+#     StaggeredVol[i,i] = DualEdge(e)
+# end
+# G = - StaggeredVol * transpose(D)
+# # println(G*g)
+# println(norm(G*g-dg))

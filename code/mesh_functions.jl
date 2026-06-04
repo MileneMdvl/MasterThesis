@@ -10,6 +10,9 @@
 #face_list:   Array of labels of all faces
 #cell_list:   Array of labels of all cells 
 
+#These are the outputs of the functions Build2DMesh and Build3DMesh from the
+#file "build_mesh.jl"
+
 using LinearAlgebra
 
 #Function: CyclicPermutations
@@ -117,7 +120,7 @@ function Circumcenter(A)
 
     #If A has two indices it is a line
     if nn == 2
-        return [p₁[1]+p₂[1], p₁[1]+p₂[1]]/2
+        return [p₁[1]+p₂[1], p₁[2]+p₂[2]]/2
     #If A has three indices then it is a triangle
     elseif nn == 3 
         p₃ = vertex_list[A[3]]

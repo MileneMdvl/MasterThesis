@@ -1,6 +1,5 @@
 using Symbolics
 using Latexify
-using Plots 
 
 @variables x, y 
 
@@ -50,17 +49,21 @@ const a_px = 1.0
 const a_py = 1.25
 const a_pxy = 0.75
 
+const Re = 1600
+
 # rho = rho_0 + rho_x * sin(a_rhox*pi*x/L) + rho_y * cos(a_rhoy*pi*y/L) + rho_xy * cos(a_rhoxy*pi*x*y/L)
 # u = u_0 + u_x * sin(a_ux*pi*x/L) + u_y * cos(a_uy*pi*y/L) + u_xy * cos(a_uxy*pi*x*y/L)
 # v = v_0 + v_x * sin(a_vx*pi*x/L) + v_y * cos(a_vy*pi*y/L) + v_xy * cos(a_vxy*pi*x*y/L)
 # p = p_0 + p_x * sin(a_px*pi*x/L) + p_y * cos(a_py*pi*y/L) + p_xy * cos(a_pxy*pi*x*y/L)
 
-rho = 1
+
 u = cos(x) * sin(y)
 v = - sin(x) * cos(y)
+# u = 1
+# v = 0
 p = 0
 
-rho_eval = eval(build_function(rho,x,y))
+# rho_eval = eval(build_function(rho,x,y))
 u_eval = eval(build_function(u,x,y))
 v_eval = eval(build_function(v,x,y))
 p_eval = eval(build_function(p,x,y))
@@ -81,6 +84,6 @@ Dp_Dx = expand_derivatives(Dx(p))
 Dp_Dy = expand_derivatives(Dy(p))
 
 
-f_x = eval(build_function(u * Du_Dx + v * Du_Dy + 1/rho * Dp_Dx - mu/rho * (Du_Dxx + Dv_Dyy), x, y))
-f_y = eval(build_function(u * Dv_Dx + v * Dv_Dy + 1/rho * Dp_Dy - mu/rho * (Du_Dxx + Dv_Dyy), x, y))
+f_x = eval(build_function(u * Du_Dx + v * Du_Dy + Dp_Dx - 1/Re * (Du_Dxx + Dv_Dyy), x, y))
+f_y = eval(build_function(u * Dv_Dx + v * Dv_Dy + Dp_Dy - 1/Re * (Du_Dxx + Dv_Dyy), x, y))
 

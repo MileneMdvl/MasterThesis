@@ -37,8 +37,11 @@ function Gradient(C,F,BF)
         for j in 1:nc
             K = C[j]
             e = F[i]
-            if isFace(e,K) && e ∉ BF
-                G[i,j] = - NormalIndicator(e,K) / DualEdge(e)
+            # if isFace(e,K) && e ∉ BF
+            #     G[i,j] = - NormalIndicator(e,K) / DualEdge(e)
+            # end
+            if isFace(e,K)
+                G[i,j] = -NormalIndicator(e,K) / Volume(e) 
             end
         end
     end

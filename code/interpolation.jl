@@ -57,10 +57,12 @@ function FaceToCellInterpolation(phi_f)
             K = cell_list[i]
             num = [0; 0]
             denom = 0
+            # denom = Volume(K)
             for j in 1:nf 
                 e = face_list[j] 
                 if isFace(e,K)
-                    num += phi_f[j] * Volume(e) * NormalVector(e)
+                    # num += phi_f[j] * Volume(e) * NormalVector(e) * NormalIndicator(e,K)
+                    num += phi_f[j] * Volume(e) * NormalVector(e) 
                     denom += Volume(e)
                 end
             end
@@ -92,6 +94,7 @@ function CellToFaceInterpolation(phi_c)
             if isFace(e,K)
                 num += dot(phi_c[j,:],NormalVector(e)) * Volume(K)
                 denom += Volume(K) 
+                # num += dot(phi_c[j,:],NormalVector(e))
             end
         end
         phi_f[i] = num/denom 

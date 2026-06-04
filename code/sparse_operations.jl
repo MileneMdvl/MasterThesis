@@ -3,6 +3,8 @@
 # - SparseInnerProduct
 # - SparseMatVec 
 
+#Not needed since we now use the SparseArrays package
+
 include("mesh_functions.jl")
 
 #Function: Evaluate
