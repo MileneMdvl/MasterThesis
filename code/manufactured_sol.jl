@@ -57,11 +57,11 @@ const Re = 1600
 # p = p_0 + p_x * sin(a_px*pi*x/L) + p_y * cos(a_py*pi*y/L) + p_xy * cos(a_pxy*pi*x*y/L)
 
 
-u = cos(x) * sin(y)
-v = - sin(x) * cos(y)
+u = cos(2*pi*x) * sin(2*pi*y)
+v = - sin(2*pi*x) * cos(2*pi*y)
 # u = 1
 # v = 0
-p = 0
+p = cos(2*pi*x) * cos(2*pi*y)
 
 # rho_eval = eval(build_function(rho,x,y))
 u_eval = eval(build_function(u,x,y))

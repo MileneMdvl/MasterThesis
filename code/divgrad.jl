@@ -37,11 +37,8 @@ function Gradient(C,F,BF)
         for j in 1:nc
             K = C[j]
             e = F[i]
-            # if isFace(e,K) && e ∉ BF
-            #     G[i,j] = - NormalIndicator(e,K) / DualEdge(e)
-            # end
             if isFace(e,K)
-                G[i,j] = -NormalIndicator(e,K) / Volume(e) 
+                G[i,j] = - NormalIndicator(e,K) / DualEdge(e)
             end
         end
     end
@@ -56,11 +53,7 @@ function Convection(uf,phi_c)
     nc = length(cell_list)
     conv = zeros(size(phi_c))
     #Compute the gradient of phi_c 
-    if phi_c isa Vector 
-        Gphi_c = SparseMatVec(G,phi_c)
-    elseif phi_c isa Matrix 
-        Gphi_c = SparseMatMat(G,phi_c)
-    end
+    Gphi_c = G*phi_c
     for i in 1:nc 
         local K = cell_list[i]
         local e_K = Faces(K)

@@ -1,6 +1,8 @@
 #This file contains all the functions needed for e.g. divergence and gradient
 #that rely only on the given discrete mesh (either 2D or 3D)
 
+#To do: - fix the comments (across all files!)
+
 #Variables considered as inputs are: 
 #d:                dimension of the problem (2 or 3)
 #K of size (d+1):  cell (triangle or tetrahedron)
@@ -184,21 +186,38 @@ function Circumcenter(A)
     end
 end
 
+#Function: Circumradius
+#Input: K cell 
+#Output: R circumradius of cell K 
+function Circumradius(K) 
+    e_K = Faces(K)
+    R = 1 / (4 * Volume(K))
+    for i in eachindex(K)
+        e = e_K[i,:]
+        R *= Volume(e)
+    end
+    return R
+end
+
 #Function: DualEdge
 #Input: e Vector of size (n-1): primal face
 #Output: |ê| Scalar: length of dual edge 
 function DualEdge(e)
-    #If edge on the boundary of the domain, then there is no dual edge 
-    #hence, |ê| = 0
-    if e in boundary_list
-        return 0 
-    end 
     #Get the labels for the two adjacent cells  
-    adjacent_cells = Adjacent(e)
-    #Get the circumcenters of the adjacent triangles 
-    cK = Circumcenter(adjacent_cells[1,:])
-    cL = Circumcenter(adjacent_cells[2,:])
-    return LinearAlgebra.norm(cK - cL) 
+    adj = Adjacent(e)
+    K, L = adj[1,:], adj[2,:]
+    #If e is a boundary face, then by definition of Adjacent(e), L = 0 
+    #Then, dual edge is computed differently (see thesis)
+    if e ∈ boundary_list
+        R = Circumradius(K)
+        dual = 2 * sqrt(R^2 - Volume(e)^2 / 4)
+    else
+        #Get the circumcenters of the adjacent triangles 
+        cK = Circumcenter(K)
+        cL = Circumcenter(L)
+        dual = LinearAlgebra.norm(cK - cL) 
+    end
+    return dual 
 end
 
 #Function Faces

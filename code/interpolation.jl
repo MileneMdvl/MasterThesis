@@ -92,9 +92,14 @@ function CellToFaceInterpolation(phi_c)
         for j in 1:nc 
             K = cell_list[j]
             if isFace(e,K)
-                num += dot(phi_c[j,:],NormalVector(e)) * Volume(K)
-                denom += Volume(K) 
-                # num += dot(phi_c[j,:],NormalVector(e))
+                if e ∉ boundary_list
+                    num += dot(phi_c[j,:],NormalVector(e)) * Volume(K)
+                    denom += Volume(K) 
+                    # num += dot(phi_c[j,:],NormalVector(e))
+                else 
+                    num = dot(phi_c[j,:],NormalVector(e))
+                    denom = 2
+                end
             end
         end
         phi_f[i] = num/denom 

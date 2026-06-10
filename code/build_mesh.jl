@@ -13,7 +13,7 @@ using Random, Distributions
 
 
 function BuildTriangulation(num_pts,plot=false)
-    bnd=[0 0; 0 1; 1 0; 1 1]
+    bnd = [0 0; 0 1; 1 0; 1 1]
     n_bnd = Int(floor(num_pts/20))
     n_inside = num_pts-4*(n_bnd+1)
 
@@ -21,7 +21,9 @@ function BuildTriangulation(num_pts,plot=false)
 
     if num_pts == 1 
         points = [0.4 0.7]
-    else 
+    elseif num_pts == 2
+        points = [0.4 0.7; 0.6 0.3]
+    else
         points = rand(Uniform(0+tol,1-tol),n_inside,2)
         for i = 1:n_inside
             for j = 1:(i-1) 
@@ -42,11 +44,11 @@ function BuildTriangulation(num_pts,plot=false)
         end
         points_bnd = rand(Uniform(0,1),n_bnd,2)
         [points_bnd[i,1] = bnd[k,1] for i in 1:n_bnd]
-        global bnd = vcat(bnd,points_bnd)
+        bnd = vcat(bnd,points_bnd)
 
         points_bnd = rand(Uniform(0,1),n_bnd,2)
         [points_bnd[i,2] = bnd[k,2] for i in 1:n_bnd]
-        global bnd = vcat(bnd,points_bnd)
+        bnd = vcat(bnd,points_bnd)
     end
 
     points = vcat(points,bnd)

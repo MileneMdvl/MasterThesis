@@ -17,16 +17,12 @@ include("divgrad.jl")
 include("sparse_operations.jl")
 include("interpolation.jl")
 include("manufactured_sol.jl")
-
-##
-
 include("build_mesh.jl")
-
-num_pts = 20
+##
+num_pts = 10
 
 vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(num_pts,true)
 
-include("divgrad.jl")
 
 nf = length(face_list)
 nc = length(cell_list)
@@ -43,11 +39,10 @@ G = Gradient(cell_list,face_list,boundary_list)
 # G = - StaggeredVol * transpose(D)
 
 # G = -transpose(D)
-#Laplacian 
+
 Laplacian = D*G
 
-# #%%
-# #Implementing the manufactured solution 
+#Implementing the manufactured solution 
 #Collect the xy coordinates of cell centers and face centers
 xc = zeros(nc)
 yc = zeros(nc)
@@ -55,14 +50,14 @@ xf = zeros(nf)
 yf = zeros(nf)
 
 for i = 1:nc 
-    K = cell_list[i]
+    local K = cell_list[i]
     local p = Circumcenter(K)
     xc[i] = p[1]
     yc[i] = p[2]
 end
 
 for i=1:nf 
-    e = face_list[i]
+    local e = face_list[i]
     local p = Circumcenter(e)
     xf[i] = p[1]
     yf[i] = p[2]
@@ -83,101 +78,85 @@ for i = 1:nc
     pc0[i] = p_eval(xc[i],yc[i])
 end
 
-# include("interpolation.jl")
-# uf0 = CellToFaceInterpolation(uc0)
-
-# println(D*uf0)
-# # println(G*uc0)
-
-# uf0 = zeros(nf,2)
-# for i = 1:nf 
-#     uf0[i,1] = u_eval(xf[i],yf[i])
-#     uf0[i,2] = v_eval(xf[i],yf[i])
-# end
-
-# function Divergence2(uf)
-#     Duf = zeros(nc)
-#     for i in 1:nc 
-#         K = cell_list[i]
-#         for j in 1:nf 
-#             e = face_list[j]
-#             if isFace(e,K)
-#                 Duf[i] +=  Volume(e) * dot(NormalVector(e),uf[j,:]) * NormalIndicator(e,K)
-#             end 
-#         end
-#         Duf[i] /= Volume(K)
-#     end
-#     return Duf
-# end
-
-# println((Divergence2(uf0)))
-
-# uf02 = zeros(nf)
-# for i = 1:nf 
-#     e = face_list[i]
-#     uf02[i] = dot(uf0[i,:],NormalVector(e))
-# end
-# println(D*uf02)
-
 #%%
-dt = 5e-5
+dt = 1e-2
 Nt = trunc(Int,1/dt)
 
+# Nt = 100
+# dt = 1/Nt 
+
 norm_u = zeros(Nt)
+norm_p = zeros(Nt)
 
 norm_div = zeros(Nt)
 where_max = zeros(Nt)
 
 uc = copy(uc0)
+
+include("divgrad.jl")
 include("interpolation.jl")
+
+uf = CellToFaceInterpolation(uc)
+
+
 for t in tqdm(1:Nt)
-    uf = CellToFaceInterpolation(uc)
-
-    # norm_div[t] = maximum(abs.((D*uf)))
-    norm_div[t] = norm(D*uf)
-    where_max[t] = argmax(abs.((D*uf)))
-
     #Intermediate Velocity
     u_star_c = uc - dt * Convection(uf,uc) + dt/Re * Laplacian*uc + dt*fc 
     # u_star_c = zeros(nc,2)
-    
 
     #Solve the Poisson pressure problem 
     u_star_f = CellToFaceInterpolation(u_star_c)
     RHS = 1/dt * D*u_star_f
-    # RHS = 1/dt * Divergence2(u_star_f)
+
     prob = LS.LinearProblem(Laplacian,RHS)
     sol = LS.solve(prob)
     local pc = sol.u 
 
-    #Update velocity 
-    global uc = u_star_c - dt * FaceToCellInterpolation(G*pc)
+    norm_p[t] = norm(pc-pc0)
 
+    #Update velocity 
+    # global uc = u_star_c - dt * FaceToCellInterpolation(G*pc)
+    global uf = u_star_f - dt* G*pc
+
+    global uc = FaceToCellInterpolation(uf)
+
+    norm_div[t] = norm(D*uf)
     norm_u[t] = norm(uc-uc0)
 end
 
+
 println("Nt = ",Nt)
-println(norm_u[end])
-println(norm_div[end])
+println("At last time step:")
+println("||u-u0||   = ",norm_u[end])
+println("||∇⋅u|| = ",norm_div[end])
+println("||p-p0||   = ",norm_p[end])
 
 CairoMakie.activate!()
 set_theme!(theme_latexfonts())
 
 fig = Figure(fontsize = 16)
-ax = Axis(fig[1,1],title=latexstring("\\text{Velocity norm, } Re=$(Re),\\ dt=$(dt)"),
-    # yscale=log10,
+ax = Axis(fig[1,1],title=latexstring("\\text{Velocity norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices} "),
+    yscale=log10,
     xlabel = "Time iterates",
     ylabel = L"||u_c-u_0||_2")
 Makie.lines!(ax,norm_u,linewidth=2)
 display(fig)
 
 fig = Figure(fontsize = 16)
-ax = Axis(fig[1,1],title=latexstring("\\text{Velocity divergence max, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices}"), 
+ax = Axis(fig[1,1],title=latexstring("\\text{Pressure norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices} "),
     yscale=log10,
     xlabel = "Time iterates",
-    ylabel = L"||Du_f||_2")
-Makie.lines!(ax,norm_div,linewidth=2)
+    ylabel = L"||p_c-p_0||_2")
+Makie.lines!(ax,norm_p,linewidth=2)
 display(fig)
+
+# fig = Figure(fontsize = 16)
+# ax = Axis(fig[1,1],title=latexstring("\\text{Velocity divergence norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices}"), 
+#     yscale=log10,
+#     xlabel = "Time iterates",
+#     ylabel = L"||Du_f||_2")
+# Makie.lines!(ax,norm_div,linewidth=2)
+# display(fig)
 
 # fig = Figure(fontsize = 16)
 # ax = Axis(fig[1,1],title=latexstring("\\text{Location of maximum, } Re=$(Re),\\ dt=$(dt)"),
