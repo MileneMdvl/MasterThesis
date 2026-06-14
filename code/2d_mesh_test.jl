@@ -19,7 +19,7 @@ include("interpolation.jl")
 include("manufactured_sol.jl")
 include("build_mesh.jl")
 ##
-num_pts = 10
+num_pts = 1
 
 vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(num_pts,true)
 
@@ -40,9 +40,12 @@ G = Gradient(cell_list,face_list,boundary_list)
 
 # G = -transpose(D)
 
-Laplacian = D*G
+#Laplacian 
+L = D*G
 
+#%%
 #Implementing the manufactured solution 
+include("manufactured_sol.jl")
 #Collect the xy coordinates of cell centers and face centers
 xc = zeros(nc)
 yc = zeros(nc)
@@ -79,11 +82,14 @@ for i = 1:nc
 end
 
 #%%
+#Time marching 
 dt = 1e-2
 Nt = trunc(Int,1/dt)
 
 # Nt = 100
 # dt = 1/Nt 
+
+println("Nt = ",Nt)
 
 norm_u = zeros(Nt)
 norm_p = zeros(Nt)
@@ -98,17 +104,32 @@ include("interpolation.jl")
 
 uf = CellToFaceInterpolation(uc)
 
+d1 = 0.375
+d2 = 0.0375 
+L_tilde = spzeros(nc,nc) 
+for i = 1:nc 
+    V = Volume(cell_list[i])
+    for j = 1:nc 
+        L_tilde[i,j] = - L[i,j] * V
+    end
+end
+Filter = 1I + d1 * L_tilde + d2 * L_tilde^2
+
+#order for the regularised convection 
+conv_order = 6
+println("Order of convection regularisation: ",conv_order)
 
 for t in tqdm(1:Nt)
     #Intermediate Velocity
-    u_star_c = uc - dt * Convection(uf,uc) + dt/Re * Laplacian*uc + dt*fc 
+    u_star_c = uc - dt * RegularisedConvection(Filter,uf,uc,conv_order) + dt/Re * L*uc - dt*fc 
+    # u_star_c = uc - dt * Convection(uf,uc) + dt/Re * L*uc - dt*fc 
     # u_star_c = zeros(nc,2)
 
     #Solve the Poisson pressure problem 
     u_star_f = CellToFaceInterpolation(u_star_c)
     RHS = 1/dt * D*u_star_f
 
-    prob = LS.LinearProblem(Laplacian,RHS)
+    prob = LS.LinearProblem(L,RHS)
     sol = LS.solve(prob)
     local pc = sol.u 
 
@@ -122,10 +143,17 @@ for t in tqdm(1:Nt)
 
     norm_div[t] = norm(D*uf)
     norm_u[t] = norm(uc-uc0)
+
+    if isnan(norm_div[t])
+        for i = t:Nt 
+            norm_div[i] = NaN
+            norm_p[i] = NaN
+            norm_u[i] = NaN 
+        end
+        break
+    end
 end
 
-
-println("Nt = ",Nt)
 println("At last time step:")
 println("||u-u0||   = ",norm_u[end])
 println("||∇⋅u|| = ",norm_div[end])
@@ -134,8 +162,13 @@ println("||p-p0||   = ",norm_p[end])
 CairoMakie.activate!()
 set_theme!(theme_latexfonts())
 
+xlims = nothing
+# xlims = (10,50)
+
 fig = Figure(fontsize = 16)
-ax = Axis(fig[1,1],title=latexstring("\\text{Velocity norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices} "),
+ax = Axis(fig[1,1],
+    limits = (xlims, nothing),
+    title=latexstring("\\text{Velocity norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices} "),
     yscale=log10,
     xlabel = "Time iterates",
     ylabel = L"||u_c-u_0||_2")
@@ -143,20 +176,25 @@ Makie.lines!(ax,norm_u,linewidth=2)
 display(fig)
 
 fig = Figure(fontsize = 16)
-ax = Axis(fig[1,1],title=latexstring("\\text{Pressure norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices} "),
+ax = Axis(fig[1,1],
+    limits = (xlims, nothing),
+    title=latexstring("\\text{Pressure norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices} "),
     yscale=log10,
     xlabel = "Time iterates",
     ylabel = L"||p_c-p_0||_2")
 Makie.lines!(ax,norm_p,linewidth=2)
 display(fig)
 
-# fig = Figure(fontsize = 16)
-# ax = Axis(fig[1,1],title=latexstring("\\text{Velocity divergence norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices}"), 
-#     yscale=log10,
-#     xlabel = "Time iterates",
-#     ylabel = L"||Du_f||_2")
-# Makie.lines!(ax,norm_div,linewidth=2)
-# display(fig)
+fig = Figure(fontsize = 16)
+ax = Axis(fig[1,1],
+    limits = (xlims, nothing),
+    title=latexstring("\\text{Velocity divergence norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices}"), 
+    yscale=log10,
+    xlabel = "Time iterates",
+    ylabel = L"||Du_f||_2",
+    )
+Makie.lines!(ax,norm_div,linewidth=2)
+display(fig)
 
 # fig = Figure(fontsize = 16)
 # ax = Axis(fig[1,1],title=latexstring("\\text{Location of maximum, } Re=$(Re),\\ dt=$(dt)"),
@@ -165,29 +203,3 @@ display(fig)
 # Makie.scatter!(ax,where_max)
 # display(fig)
 
-#%%
-
-# include("divgrad.jl")
-
-# g = zeros(nc)
-# for i = 1:nc 
-#     g[i] = xc[i]^2
-# end
-# dg = zeros(nf)
-# for i = 1:nf 
-#     dg[i] = xf[i] * 2
-# end
-
-# # println(g)
-# # println(dg)
-# G = Gradient(cell_list,face_list,boundary_list)
-# # println(G*g)
-# println(norm(G*g-dg))
-# StaggeredVol = spzeros(nf,nf)
-# for i = 1:nf 
-#     e = face_list[i]
-#     StaggeredVol[i,i] = DualEdge(e)
-# end
-# G = - StaggeredVol * transpose(D)
-# # println(G*g)
-# println(norm(G*g-dg))

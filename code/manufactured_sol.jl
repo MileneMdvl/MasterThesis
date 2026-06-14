@@ -14,48 +14,47 @@ using Latexify
 # @variables a_vx, a_vy, a_vxy
 # @variables a_px, a_py, a_pxy
 
-const L = 1
-const mu = 10
+# const l = 1
+# const mu = 10
 
-const rho_0 = 1 
-const rho_x = 0.1 
-const rho_y = 0.15 
-const rho_xy = 0.08 
-const a_rhox = 0.75 
-const a_rhoy = 1.0
-const a_rhoxy = 1.25 
+# const rho_0 = 1 
+# const rho_x = 0.1 
+# const rho_y = 0.15 
+# const rho_xy = 0.08 
+# const a_rhox = 0.75 
+# const a_rhoy = 1.0
+# const a_rhoxy = 1.25 
 
-const u_0 = 70 
-const u_x = 4
-const u_y = -12 
-const u_xy = 7
-const a_ux = 5/3
-const a_uy = 1.5
-const a_uxy = 0.6
+# const u_0 = 70 
+# const u_x = 4
+# const u_y = -12 
+# const u_xy = 7
+# const a_ux = 5/3
+# const a_uy = 1.5
+# const a_uxy = 0.6
 
-const v_0 = 90
-const v_x = -20 
-const v_y = 4
-const v_xy = -11 
-const a_vx = 1.5
-const a_vy = 1.0 
-const a_vxy = 0.9 
+# const v_0 = 90
+# const v_x = -20 
+# const v_y = 4
+# const v_xy = -11 
+# const a_vx = 1.5
+# const a_vy = 1.0 
+# const a_vxy = 0.9 
 
-const p_0 = 1e5
-const p_x = -0.3e5
-const p_y = 0.2e5
-const p_xy = -0.25e5 
-const a_px = 1.0 
-const a_py = 1.25
-const a_pxy = 0.75
+# const p_0 = 1e5
+# const p_x = -0.3e5
+# const p_y = 0.2e5
+# const p_xy = -0.25e5 
+# const a_px = 1.0 
+# const a_py = 1.25
+# const a_pxy = 0.75
+
+# rho = rho_0 + rho_x * sin(a_rhox*pi*x/l) + rho_y * cos(a_rhoy*pi*y/l) + rho_xy * cos(a_rhoxy*pi*x*y/l)
+# u = u_0 + u_x * sin(a_ux*pi*x/l) + u_y * cos(a_uy*pi*y/l) + u_xy * cos(a_uxy*pi*x*y/l)
+# v = v_0 + v_x * sin(a_vx*pi*x/l) + v_y * cos(a_vy*pi*y/l) + v_xy * cos(a_vxy*pi*x*y/l)
+# p = p_0 + p_x * sin(a_px*pi*x/l) + p_y * cos(a_py*pi*y/l) + p_xy * cos(a_pxy*pi*x*y/l)
 
 const Re = 1600
-
-# rho = rho_0 + rho_x * sin(a_rhox*pi*x/L) + rho_y * cos(a_rhoy*pi*y/L) + rho_xy * cos(a_rhoxy*pi*x*y/L)
-# u = u_0 + u_x * sin(a_ux*pi*x/L) + u_y * cos(a_uy*pi*y/L) + u_xy * cos(a_uxy*pi*x*y/L)
-# v = v_0 + v_x * sin(a_vx*pi*x/L) + v_y * cos(a_vy*pi*y/L) + v_xy * cos(a_vxy*pi*x*y/L)
-# p = p_0 + p_x * sin(a_px*pi*x/L) + p_y * cos(a_py*pi*y/L) + p_xy * cos(a_pxy*pi*x*y/L)
-
 
 u = cos(2*pi*x) * sin(2*pi*y)
 v = - sin(2*pi*x) * cos(2*pi*y)
