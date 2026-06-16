@@ -5,54 +5,11 @@
 # - bnd = the localisation of the 4 boundary vertices for the domain 
 # - plot: Boolean, whether to make a plot or not 
 
-#Note the points in the mesh will be uniformly distributed on (0,1)
-
 using Meshes
 using Delaunay, GeometryBasics
 using Random, Distributions
 
-
-function BuildTriangulation(num_pts,plot=false)
-    bnd = [0 0; 0 1; 1 0; 1 1]
-    n_bnd = Int(floor(num_pts/20))
-    n_inside = num_pts-4*(n_bnd+1)
-
-    tol = 1/num_pts
-
-    if num_pts == 1 
-        points = [0.4 0.7]
-    elseif num_pts == 2
-        points = [0.4 0.7; 0.6 0.3]
-    else
-        points = rand(Uniform(0+tol,1-tol),n_inside,2)
-        for i = 1:n_inside
-            for j = 1:(i-1) 
-                while norm(points[i,:] - points[j,:]) < tol
-                    points[i,:] = rand(Uniform(0+tol,1-tol),2)
-                end
-
-            end
-        end
-    end
-
-    #Place points on boundary if needed 
-    for j in 1:2
-        if j ==  1
-            k = 1
-        elseif j == 2
-            k = 4
-        end
-        points_bnd = rand(Uniform(0,1),n_bnd,2)
-        [points_bnd[i,1] = bnd[k,1] for i in 1:n_bnd]
-        bnd = vcat(bnd,points_bnd)
-
-        points_bnd = rand(Uniform(0,1),n_bnd,2)
-        [points_bnd[i,2] = bnd[k,2] for i in 1:n_bnd]
-        bnd = vcat(bnd,points_bnd)
-    end
-
-    points = vcat(points,bnd)
-
+function BuildTriangulation(points,plot=false)
     mesh = Delaunay.delaunay(points)
 
     tris = [GeometryBasics.TriangleFace(mesh.simplices[i, :]...) for i in 1:size(mesh.simplices, 1)]
@@ -100,11 +57,103 @@ function BuildTriangulation(num_pts,plot=false)
         Makie.wireframe!(ax,m,transparency = true)
         Makie.scatter!(ax,points)
         display(fig)
+        # save("figures/mesh_$(length(points))vertices.pdf",fig,pt_per_unit=1)
     end
     return vertex_list, face_list, boundary_list, cell_list
 end
 
+function RegularPoints(N)
+    dx = 1/(N-1)
 
-function BuildTetrahedralisation()
+    x_odd = range(0,1,length=N)
+    x_even = zeros(N+1)
+    for i=2:N
+        x_even[i] = dx/2 + (i-2) * dx
+    end
+    x_even[N+1] = 1
 
+
+    #Height of equilateral triangle with length 1
+    h = sqrt(3)/2 
+    y = range(0,h,length=N)
+    Ny = length(y)
+
+    if Ny % 2 ==0 
+        Npts = Ny/2 * N + Ny/2 * (N+1)
+    else 
+        Npts = floor(Ny/2) * (N+1) + ceil(Ny/2) * N
+    end
+    Npts = trunc(Int,Npts)
+
+    pts = zeros(Npts,2) 
+    ind = 1
+    for j = 1:Ny 
+        #If odd row 
+        if j % 2 == 1
+            for i=ind:(ind+N-1)
+                k = i - ind + 1
+                pts[i,1] = x_odd[k]
+                pts[i,2] = y[j]
+            end
+            ind += N
+        else 
+            for i=ind:(ind+N)
+                k = i - ind + 1
+                pts[i,1] = x_even[k]
+                pts[i,2] = y[j]
+            end
+            ind += N+1 
+        end
+    end
+    return pts
 end
+
+#Note the points in the mesh will be uniformly distributed on (0,1)
+function GenerateRandomPoints(num_pts)
+    bnd = [0 0; 0 1; 1 0; 1 1]
+    n_bnd = Int(floor(num_pts/20))
+    n_inside = num_pts-4*(n_bnd+1)
+
+    tol = 1/num_pts
+
+    if num_pts == 1 
+        points = [0.4 0.7]
+    elseif num_pts == 2
+        points = [0.4 0.7; 0.6 0.3]
+    else
+        points = rand(Uniform(0+tol,1-tol),n_inside,2)
+        for i = 1:n_inside
+            for j = 1:(i-1) 
+                while norm(points[i,:] - points[j,:]) < tol
+                    points[i,:] = rand(Uniform(0+tol,1-tol),2)
+                end
+
+            end
+        end
+    end
+
+    #Place points on boundary if needed 
+    for j in 1:2
+        if j ==  1
+            k = 1
+        elseif j == 2
+            k = 4
+        end
+        points_bnd = rand(Uniform(0,1),n_bnd,2)
+        [points_bnd[i,1] = bnd[k,1] for i in 1:n_bnd]
+        bnd = vcat(bnd,points_bnd)
+
+        points_bnd = rand(Uniform(0,1),n_bnd,2)
+        [points_bnd[i,2] = bnd[k,2] for i in 1:n_bnd]
+        bnd = vcat(bnd,points_bnd)
+    end
+
+    points = vcat(points,bnd)
+    return points 
+end
+
+
+
+# function BuildTetrahedralisation()
+
+# end
