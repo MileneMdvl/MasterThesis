@@ -66,7 +66,7 @@ function Convection(uf,phi_c)
     return conv
 end
 
-#C4 regularised convection from Trias et al and Verstappen 
+#Regularised convections from  Verstappen 
 function RegularisedConvection(Filter,uf,uc,order::Int)
     uc_filt = Filter * uc
     uc_res = uc - uc_filt

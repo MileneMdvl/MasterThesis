@@ -12,6 +12,10 @@ using SparseArrays
 using ProgressBars
 import LinearSolve as LS
 
+#To save the data 
+using JLD
+
+
 include("mesh_functions.jl")
 include("divgrad.jl")
 include("sparse_operations.jl")
@@ -19,22 +23,32 @@ include("interpolation.jl")
 include("manufactured_sol.jl")
 include("build_mesh.jl")
 ##
-num_pts = 6
-# points = GenerateRandomPoints(num_pts)
-points = RegularPoints(num_pts)
+N = 24
+dx = 1/N
+# points = GenerateRandomPoints(N)
+global pts = RegularPoints(N)
 
-vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(points,true)
+global points, mesh, vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(pts)
 
-nf = length(face_list)
-nc = length(cell_list)
-nv = length(vertex_list)
+CairoMakie.activate!()
+set_theme!(theme_latexfonts())
 
-println(length(points))
-println(nv)
+fig = Figure(fontsize = 12)
 
-D = Divergence(cell_list,face_list)
-G = Gradient(cell_list,face_list,boundary_list)
+ax1 = Axis(fig[1,1],title=latexstring("\\text{2D triangulated mesh with $(length(points)) vertices}"))
+Makie.wireframe!(ax1,mesh,transparency = true)
+Makie.scatter!(ax1,points)
 
+display(fig)
+
+#%%
+
+global nf = length(face_list)
+global nc = length(cell_list)
+global nv = length(vertex_list)
+
+global D = Divergence(cell_list,face_list)
+global G = Gradient(cell_list,face_list,boundary_list)
 # StaggeredVol = spzeros(nf,nf)
 # for i = 1:nf 
 #     e = face_list[i]
@@ -45,11 +59,11 @@ G = Gradient(cell_list,face_list,boundary_list)
 # G = -transpose(D)
 
 #Laplacian 
-L = D*G
+global L = D*G
 
 #%%
-#Implementing the manufactured solution 
-include("manufactured_sol.jl")
+
+#Implement the manufactured solution
 #Collect the xy coordinates of cell centers and face centers
 xc = zeros(nc)
 yc = zeros(nc)
@@ -85,11 +99,18 @@ for i = 1:nc
     pc0[i] = p_eval(xc[i],yc[i])
 end
 
+uf0 = zeros(nf)
+for i = 1:nf
+    local ue = zeros(2)
+    ue[1] = u_eval(xf[i],yf[i])
+    ue[2] = v_eval(xf[i],yf[i])
+    local ne = NormalVector(face_list[i])
+    uf0[i] = dot(ue,ne)
+end
 #%%
 #Time marching 
-dx = 1/num_pts 
-dt = dx/2
-Nt = trunc(Int,1/dt)
+Nt = N 
+dt = 1/Nt 
 
 # Nt = 100
 # dt = 1/Nt 
@@ -103,30 +124,10 @@ norm_div = zeros(Nt)
 where_max = zeros(Nt)
 
 uc = copy(uc0)
-
-include("divgrad.jl")
-include("interpolation.jl")
-
-uf = CellToFaceInterpolation(uc)
-
-d1 = 0.375
-d2 = 0.0375 
-L_tilde = spzeros(nc,nc) 
-for i = 1:nc 
-    V = Volume(cell_list[i])
-    for j = 1:nc 
-        L_tilde[i,j] = - L[i,j] * V
-    end
-end
-Filter = 1I + d1 * L_tilde + d2 * L_tilde^2
-
-#order for the regularised convection 
-conv_order = 0
-println("Order of convection regularisation: ",conv_order)
-
+uf = copy(uf0)
 for t in tqdm(1:Nt)
     #Intermediate Velocity
-    u_star_c = uc - dt * RegularisedConvection(Filter,uf,uc,conv_order) + dt/Re * L*uc - dt*fc 
+    u_star_c = uc - dt * Convection(uf,uc) + dt/Re * L*uc - dt*fc 
     # u_star_c = uc - dt * Convection(uf,uc) + dt/Re * L*uc - dt*fc 
     # u_star_c = zeros(nc,2)
 
@@ -136,7 +137,7 @@ for t in tqdm(1:Nt)
 
     prob = LS.LinearProblem(L,RHS)
     sol = LS.solve(prob)
-    local pc = sol.u 
+    global pc = sol.u 
     
     norm_p[t] = norm(pc-pc0)/sqrt(nc)
 
@@ -147,7 +148,7 @@ for t in tqdm(1:Nt)
     global uc = FaceToCellInterpolation(uf)
 
     norm_div[t] = norm(D*uf)
-    norm_u[t] = norm(uc-uc0)/sqrt(nc)
+    norm_u[t] = norm(uf-uf0)/sqrt(nc)
 
     if isnan(norm_div[t])
         for i = t:Nt 
@@ -158,13 +159,13 @@ for t in tqdm(1:Nt)
         break
     end
 end
+save("data/data_$(N).jld","pc",pc,"uc",uc,"uf",uf,"pc0",pc0,"uf0",uf0,"uc0",uc0)
+
 
 println("At last time step:")
 println("||u-u0||   = ",norm_u[end])
-println("||∇⋅u|| = ",norm_div[end])
+println("||∇⋅u||    = ",norm_div[end])
 println("||p-p0||   = ",norm_p[end])
-
-#%% 
 
 CairoMakie.activate!()
 set_theme!(theme_latexfonts())
@@ -172,47 +173,53 @@ set_theme!(theme_latexfonts())
 xlims = nothing
 # xlims = (10,50)
 
-fig = Figure(fontsize = 16)
-ax = Axis(fig[1,1],
+fig = Figure(fontsize = 12,size = (900, 700))
+
+Label(fig[0,1:2],fontsize=14,latexstring("Re = $(Re),\\ N = $(N),\\ dt = $(round(dt,digits=5)),\\ dx = $(round(dx,digits=5))"))
+
+ax1 = Axis(fig[1,1],title=latexstring("\\text{2D triangulated mesh with $(length(points)) vertices}"))
+Makie.wireframe!(ax1,mesh,transparency = true)
+Makie.scatter!(ax1,points)
+
+ax2 = Axis(fig[1,2],
     limits = (xlims, nothing),
-    title=latexstring("\\text{Velocity norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices} "),
-    # yscale=log10,
-    xlabel = "Time iterates",
-    ylabel = L"||u_c-u_0||_2")
-Makie.lines!(ax,norm_u,linewidth=2)
-display(fig)
-
-# save("figures/velocity_$(nv)_$(dt).pdf",fig,pt_per_unit=1)
-
-fig = Figure(fontsize = 16)
-ax = Axis(fig[1,1],
-    limits = (xlims, nothing),
-    title=latexstring("\\text{Pressure norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices} "),
-    yscale=log10,
-    xlabel = "Time iterates",
-    ylabel = L"||p_c-p_0||_2")
-Makie.lines!(ax,norm_p,linewidth=2)
-display(fig)
-
-# save("figures/pressure_$(nv)_$(dt).pdf",fig,pt_per_unit=1)
-
-fig = Figure(fontsize = 16)
-ax = Axis(fig[1,1],
-    limits = (xlims, nothing),
-    title=latexstring("\\text{Velocity divergence norm, } Re=$(Re),\\ dt=$(dt),\\ $(nv)\\ \\text{vertices}"), 
+    title=latexstring("\\text{Velocity divergence norm}"), 
     # yscale=log10,
     xlabel = "Time iterates",
     ylabel = L"||Du_f||_2",
     )
-Makie.lines!(ax,norm_div,linewidth=2)
+Makie.lines!(ax2,norm_div,linewidth=2)
+
+ax3 = Axis(fig[2,1],
+    limits = (xlims, nothing),
+    title=latexstring("\\text{Velocity norm}"),
+    # yscale=log10,
+    xlabel = "Time iterates",
+    ylabel = L"||u_f-u_0||_2")
+Makie.lines!(ax3,norm_u,linewidth=2)
+
+ax4 = Axis(fig[2,2],
+    limits = (xlims, nothing),
+    title=latexstring("\\text{Pressure norm}"),
+    yscale=log10,
+    xlabel = "Time iterates",
+    ylabel = L"||p_c-p_0||_2")
+Makie.lines!(ax4,norm_p,linewidth=2)
+
 display(fig)
+save("figures/N=$(N).pdf", fig, px_per_unit = 1)
 
-# save("figures/divergence_$(nv)_$(dt).pdf",fig,pt_per_unit=1)
-
-# fig = Figure(fontsize = 16)
-# ax = Axis(fig[1,1],title=latexstring("\\text{Location of maximum, } Re=$(Re),\\ dt=$(dt)"),
-#     xlabel = "Time iterates",
-#     ylabel = L"||Du_f||_2")
-# Makie.scatter!(ax,where_max)
-# display(fig)
-
+#%%
+#For the regularised convection 
+# d1 = 0.375
+# d2 = 0.0375 
+# L_tilde = spzeros(nc,nc) 
+# for i = 1:nc 
+#     V = Volume(cell_list[i])
+#     for j = 1:nc 
+#         L_tilde[i,j] = - L[i,j] * V
+#     end
+# end
+# Filter = 1I + d1 * L_tilde + d2 * L_tilde^2
+# conv_order = 0
+# println("Order of convection regularisation: ",conv_order)

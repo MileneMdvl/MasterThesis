@@ -9,7 +9,7 @@ using Meshes
 using Delaunay, GeometryBasics
 using Random, Distributions
 
-function BuildTriangulation(points,plot=false)
+function BuildTriangulation(points)
     mesh = Delaunay.delaunay(points)
 
     tris = [GeometryBasics.TriangleFace(mesh.simplices[i, :]...) for i in 1:size(mesh.simplices, 1)]
@@ -49,17 +49,7 @@ function BuildTriangulation(points,plot=false)
     cell_list = collect(mesh.simplices[i,:] for i in 1:size(mesh.simplices,1))
     vertex_list = collect(mesh.points[i,:] for i in 1:size(mesh.points,1))
 
-    if plot 
-        CairoMakie.activate!()
-        set_theme!(theme_latexfonts())
-        fig = Figure()
-        ax = Axis(fig[1,1],title="2D triangulated mesh with $(length(points)) vertices")
-        Makie.wireframe!(ax,m,transparency = true)
-        Makie.scatter!(ax,points)
-        display(fig)
-        # save("figures/mesh_$(length(points))vertices.pdf",fig,pt_per_unit=1)
-    end
-    return vertex_list, face_list, boundary_list, cell_list
+    return points, m, vertex_list, face_list, boundary_list, cell_list
 end
 
 function RegularPoints(N)
