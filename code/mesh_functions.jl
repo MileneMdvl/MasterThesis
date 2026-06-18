@@ -220,25 +220,49 @@ function DualEdge(e)
     return dual 
 end
 
+#return faces (indices) around a cell (vector)
+function FacesInd(K)
+    d = length(K) - 1 
+    
+    vc_a = vc_info[K[1]]
+    vc_b = vc_info[K[2]]
+    inter = intersect(vc_a,vc_b)
+
+    vc_c = vc_info[K[3]]
+    inter = intersect(inter,vc_c)
+
+    if d == 3
+        vc_d = vc_info[K[4]]
+        inter = intersect(inter,vc_d)
+    end
+
+    return cf_info[inter[1]]
+end
+
 #Function Faces
 #Input: K Vector of size (d+1): cell to find the boundary of 
 #Output e_K Matrix of size (d+1)*d: Matrix of Vectors of faces
 function Faces(K)
     d = length(K) - 1
-    KK = CyclicPermutations(K)
+    # KK = CyclicPermutations(K)
     e_K = zeros(Int,d+1,2)
-    for i in 1:(d+1) 
-        e = KK[i][1:d] 
-        if e in face_list
-            e_K[i,:] = e
-        else 
-            ee = CyclicPermutations(e)
-            for e in ee 
-                if e in face_list
-                    e_K[i,:] = e 
-                end
-            end
-        end
+    # for i in 1:(d+1) 
+    #     e = KK[i][1:d] 
+    #     if e in face_list
+    #         e_K[i,:] = e
+    #     else 
+    #         ee = CyclicPermutations(e)
+    #         for e in ee 
+    #             if e in face_list
+    #                 e_K[i,:] = e 
+    #             end
+    #         end
+    #     end
+    # end
+
+    faces_ind = FacesInd(K)
+    for i in eachindex(faces_ind)
+        e_K[i,:] = face_list[faces_ind[i]]
     end
     return e_K
 end
@@ -282,26 +306,44 @@ function WithVertex(v,type::String)
     return list 
 end
 
+#COMMENT
+function AdjAux(e)
+    d = length(e)
+    adj = Array{Int,1}()
+    vc_a = vc_info[e[1]]
+    vc_b = vc_info[e[2]]
+    inter = intersect(vc_a,vc_b)
+    if  d == 3
+        vc_c = vc_info[e[3]]
+        inter = intersect(inter,vc_c)
+    end
+    return inter 
+end
+
 #Function: Adjacent 
 #Input: e Vector of size d: face 
 #Output: [K; L] Matrix of size 2*(d+1): adjacent cells
 function Adjacent(e)
     d = length(e) 
     adjacent_cells = zeros(Int,2,d+1)
-
-    #If e is on the domain boundary, set the second adjacent cell to [0]ₙ
-    if e in boundary_list
-        [adjacent_cells[2,i] = 0 for i in 1:(d+1)]
-    end 
-
-    #Find the adjacent cells to edge e
-    i = 1
-    for j in eachindex(cell_list)
-        if e ⊆ cell_list[j] 
-            adjacent_cells[i,:] = cell_list[j]
-            i+=1
-        end
+    cells = AdjAux(e)
+    for i in eachindex(cells)
+        adjacent_cells[i,:] = cell_list[cells[i]]
     end
+
+    # #If e is on the domain boundary, set the second adjacent cell to [0]ₙ
+    # if e in boundary_list
+    #     [adjacent_cells[2,i] = 0 for i in 1:(d+1)]
+    # end 
+
+    # #Find the adjacent cells to edge e
+    # i = 1
+    # for j in eachindex(cell_list)
+    #     if e ⊆ cell_list[j] 
+    #         adjacent_cells[i,:] = cell_list[j]
+    #         i+=1
+    #     end
+    # end
     return adjacent_cells
 end
 

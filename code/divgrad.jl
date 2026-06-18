@@ -13,8 +13,8 @@ function Divergence(C, F)
     nf = length(F)
     D = spzeros(nc,nf)
     for i in 1:nc 
-        for j in 1:nf 
-            K = C[i]
+        K = C[i]
+        for j in cf_info[i]
             e = F[j]
             if isFace(e,K)
                 D[i,j] = Volume(e)/Volume(K) * NormalIndicator(e,K)
@@ -33,9 +33,9 @@ function Gradient(C,F,BF)
     nc = length(C)
     nf = length(F)
     G = spzeros(nf,nc)
-    for i in 1:nf
-        for j in 1:nc
-            K = C[j]
+    for j in 1:nc
+        K = C[j]
+        for i in cf_info[j]
             e = F[i]
             if isFace(e,K)
                 G[i,j] = - NormalIndicator(e,K) / DualEdge(e)
@@ -56,11 +56,9 @@ function Convection(uf,phi_c)
     Gphi_c = G*phi_c
     for i in 1:nc 
         local K = cell_list[i]
-        local e_K = Faces(K)
-        for k in 1:3
-            e = e_K[k,:]
-            ind_e = findall(x->x==e, face_list)[1]
-            conv[i,:] += DualEdge(e) * Volume(e) * uf[ind_e] * Gphi_c[ind_e,:]
+        for j in cf_info[i]
+            e = face_list[j]
+            conv[i,:] += DualEdge(e) * Volume(e) * uf[j] * Gphi_c[j,:]
         end
     end
     return conv

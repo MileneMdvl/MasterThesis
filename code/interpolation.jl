@@ -44,7 +44,7 @@ end
 #Function FaceToCellInterpolation
 #Input: phi_f, face-centred vector 
 #Output: phi_c, cell-centred vector 
-function FaceToCellInterpolation(phi_f)
+function FaceToCellInterpolation(phi_f,Trias=false)
     nf = length(face_list)
     nc = length(cell_list)
     #Get dimension of the problem
@@ -58,11 +58,12 @@ function FaceToCellInterpolation(phi_f)
             num = [0; 0]
             denom = 0
             # denom = Volume(K)
-            for j in 1:nf 
+            for j in cf_info[i]
                 e = face_list[j] 
-                if isFace(e,K)
-                    # num += phi_f[j] * Volume(e) * NormalVector(e) * NormalIndicator(e,K)
-                    num += phi_f[j] * Volume(e) * NormalVector(e) 
+                num += phi_f[j] * Volume(e) * NormalVector(e) 
+                if Trias 
+                    denom = Volume(K)
+                else 
                     denom += Volume(e)
                 end
             end
@@ -76,7 +77,7 @@ end
 #Input:  phi_c, cell-centred matrix, of dimension nc * d 
 #        where d is the dimension of the problem 
 #Output: phi_f, face-centred vector
-function CellToFaceInterpolation(phi_c)
+function CellToFaceInterpolation(phi_c,Trias=false)
     d = length(face_list[1])
     nf = length(face_list)
     nc = length(cell_list)
@@ -89,17 +90,19 @@ function CellToFaceInterpolation(phi_c)
         e = face_list[i]
         num = 0
         denom = 0
-        for j in 1:nc 
+        for j in AdjAux(e)
             K = cell_list[j]
-            if isFace(e,K)
-                if e ∉ boundary_list
+            if e ∉ boundary_list
+                if Trias 
+                    num += dot(phi_c[j,:],NormalVector(e))
+                    denom = 2
+                else
                     num += dot(phi_c[j,:],NormalVector(e)) * Volume(K)
                     denom += Volume(K) 
-                    # num += dot(phi_c[j,:],NormalVector(e))
-                else 
-                    num = dot(phi_c[j,:],NormalVector(e))
-                    denom = 2
                 end
+            else 
+                num = dot(phi_c[j,:],NormalVector(e))
+                denom = 2
             end
         end
         phi_f[i] = num/denom 

@@ -23,9 +23,9 @@ include("interpolation.jl")
 include("manufactured_sol.jl")
 include("build_mesh.jl")
 ##
-N = 24
+N = 6
 dx = 1/N
-# points = GenerateRandomPoints(N)
+# pts = GenerateRandomPoints(N)
 global pts = RegularPoints(N)
 
 global points, mesh, vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(pts)
@@ -42,11 +42,45 @@ Makie.scatter!(ax1,points)
 display(fig)
 
 #%%
-
 global nf = length(face_list)
 global nc = length(cell_list)
 global nv = length(vertex_list)
 
+
+#%%
+#Indices for each cell containing the i-th vertex, where the i-th entry corresponds to
+#the i-th vertex 
+vc_info = Dict{Int,Array{Int,1}}()
+for i = 1:nc 
+    local K = cell_list[i]
+    for j in K 
+        if j ∉ keys(vc_info) 
+            vc_info[j] = [i]
+        else
+            push!(vc_info[j],i)
+        end
+    end
+end
+vc_info
+
+#gives the faces indices around each cell index 
+cf_info = Dict{Int,Array{Int,1}}()
+for i = 1:nf 
+    local e = face_list[i]
+    cell_inds = AdjAux(e)
+    for j in cell_inds
+        if j ∉ keys(cf_info) 
+            cf_info[j] = [i]
+        else
+            push!(cf_info[j],i)
+        end
+    end
+end
+cf_info
+
+
+
+#%%
 global D = Divergence(cell_list,face_list)
 global G = Gradient(cell_list,face_list,boundary_list)
 # StaggeredVol = spzeros(nf,nf)
@@ -159,7 +193,7 @@ for t in tqdm(1:Nt)
         break
     end
 end
-save("data/data_$(N).jld","pc",pc,"uc",uc,"uf",uf,"pc0",pc0,"uf0",uf0,"uc0",uc0)
+save("data/data_$(N).jld","pc",pc,"uc",uc,"uf",uf,"pc0",pc0,"uf0",uf0,"uc0",uc0,"norm_u",norm_u,"norm_p",norm_p)
 
 
 println("At last time step:")
