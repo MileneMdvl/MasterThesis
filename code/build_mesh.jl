@@ -9,7 +9,9 @@ This file contains the functions to generate points and build a triangulation. T
 
 The triangulation uses the package Delaunay: https://github.com/eschnett/Delaunay.jl 
 
+The input for the generation of points is a parameter, N which determines how many points are to be generated. 
 
+The input for the triangulation is the aforementioned points. It's output is then used in the file mesh_functions.jl. 
 "
 
 using Meshes
@@ -18,20 +20,40 @@ using Random, Distributions
 
 "
 Function: 
-    
+    BuildTriangulation
 
 Input: 
-    
+    pts: Array{Float,2}
+    the set of point to triangulate
 
 Output: 
+    points: Vector{Point{2, Float}}
+        the points of the triangulation (as GeometryBasics object)
+    mesh: GeometryBasics.Mesh 
+        the mesh of the triangulation 
+    vertex_list: Vector{Vector{Float}}
+        the coordinates in d-dimensions of the vertices 
+    face_list: Vector{Vector{Int}}
+        the faces given in terms of the vertices indices 
+        e.g. in 2D a face is given by [a,b] and in 3D by [a,b,c]
+        if [a,b] is stored, then [b,a] is not (and similarly for 3D)
+    boundary_list: Vector{Vector{Int}}
+        the faces on the boundary of the domain
+        this is a subset of face_list
+    cell_list: Vector{Vector{Int}}
+        the cells given in terms of the vertices indices 
     
-"
-function BuildTriangulation(points)
-    mesh = Delaunay.delaunay(points)
+The outputs points and mesh are needed to plot the resulting triangulation. 
+The outputs vertex_list, face_list, boundary_list and cell_list are needed for all other .jl files. 
 
-    tris = [GeometryBasics.TriangleFace(mesh.simplices[i, :]...) for i in 1:size(mesh.simplices, 1)]
-    points = Makie.to_vertices(mesh.points)
-    m = GeometryBasics.Mesh(points, tris) 
+This file should then be run first. However, note that when collecting the aforementioned lists, we also make use of the functions CyclicPermutations and UniqueList from 'mesh_functions.jl'.
+"
+function BuildTriangulation(pts)
+    m = Delaunay.delaunay(pts)
+
+    tris = [GeometryBasics.TriangleFace(m.simplices[i, :]...) for i in 1:size(m.simplices, 1)]
+    points = Makie.to_vertices(m.points)
+    mesh = GeometryBasics.Mesh(points, tris) 
 
 
     lines = GeometryBasics.decompose(LineFace{Int}, tris)
@@ -69,16 +91,31 @@ function BuildTriangulation(points)
     return points, m, vertex_list, face_list, boundary_list, cell_list
 end
 
+"
+Function: 
+    RegularPoints
+
+Input: 
+    N: Int 
+    the number of points on each side of the rectangular domain
+
+Output: 
+    pts: Array{Float,2}
+    the set of point given in a regular mesh to triangulate
+
+The domain is is predefined to be [0,1]x[0,√3/2], where √3/2 is the height of an equilateral triangle of side length 1. N determines the number of points on each side of the domain, which in turn determines how many points there are in total. 
+"
 function RegularPoints(N)
     dx = 1/(N-1)
 
+    #Determine what the x-coordinate of the point is, depending on if we are on
+    #an even row or not
     x_odd = range(0,1,length=N)
     x_even = zeros(N+1)
     for i=2:N
         x_even[i] = dx/2 + (i-2) * dx
     end
     x_even[N+1] = 1
-
 
     #Height of equilateral triangle with length 1
     h = sqrt(3)/2 
@@ -115,17 +152,32 @@ function RegularPoints(N)
     return pts
 end
 
-#Note the points in the mesh will be uniformly distributed on (0,1)
-function GenerateRandomPoints(num_pts)
+"
+Function: 
+    RandomPoints(N)
+
+Input: 
+    N: Int 
+    the number of total desired points 
+
+Output: 
+    points: Array{Float,2}
+    the set of randomly generated points to triangulate 
+
+The points are here uniformly distributed on [0,1]. We set a tolerance such that no two points can be closer than a distance of 1/N from one another. This aims to avoid invalid Delaunay triangulations. 
+"
+function RandomPoints(N)
+    #Define the boundary 
     bnd = [0 0; 0 1; 1 0; 1 1]
-    n_bnd = Int(floor(num_pts/20))
-    n_inside = num_pts-4*(n_bnd+1)
+    n_bnd = Int(floor(N/20))
+    n_inside = N-4*(n_bnd+1)
 
-    tol = 1/num_pts
+    #Set a tolerance 
+    tol = 1/N
 
-    if num_pts == 1 
+    if N == 1 
         points = [0.4 0.7]
-    elseif num_pts == 2
+    elseif N == 2
         points = [0.4 0.7; 0.6 0.3]
     else
         points = rand(Uniform(0+tol,1-tol),n_inside,2)
