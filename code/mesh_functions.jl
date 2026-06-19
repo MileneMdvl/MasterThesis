@@ -321,7 +321,7 @@ Output:
     inds_e_K: 
     indices of the faces within face_list that border the cell K 
 
-This functions is required to speed up computations when finding the faces on the boundary of a given cell. It uses the dictionaries vc_info and cf_info. 
+This functions is required to speed up computations when finding the faces on the boundary of a given cell. It uses the dictionaries vc_info and cf_info. These dictionaries are defined in the main file (here: 2d_mesh_test.jl)
 "
 function FacesInd(K)
     #Get the number of vertices that make up K 
@@ -472,6 +472,7 @@ function Adjacent(e)
     end
     return adjacent_cells
 end
+
 
 "
 Function: 

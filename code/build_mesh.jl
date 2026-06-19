@@ -1,9 +1,3 @@
-#This file contains the functions to build a two- and three-dimensional
-#triangulation, given as inputs: 
-
-# - num_pts: Int: number of vertices desired for the triangulation 
-# - bnd = the localisation of the 4 boundary vertices for the domain 
-# - plot: Boolean, whether to make a plot or not 
 "
 This file contains the functions to generate points and build a triangulation. There are two options for points generation: random or regular. So far, the point generation only holds for a 2-dimensional domain. 
 
@@ -29,7 +23,7 @@ Input:
 Output: 
     points: Vector{Point{2, Float}}
         the points of the triangulation (as GeometryBasics object)
-    mesh: GeometryBasics.Mesh 
+    m: GeometryBasics.Mesh 
         the mesh of the triangulation 
     vertex_list: Vector{Vector{Float}}
         the coordinates in d-dimensions of the vertices 
@@ -49,11 +43,11 @@ The outputs vertex_list, face_list, boundary_list and cell_list are needed for a
 This file should then be run first. However, note that when collecting the aforementioned lists, we also make use of the functions CyclicPermutations and UniqueList from 'mesh_functions.jl'.
 "
 function BuildTriangulation(pts)
-    m = Delaunay.delaunay(pts)
+    mesh = Delaunay.delaunay(pts)
 
-    tris = [GeometryBasics.TriangleFace(m.simplices[i, :]...) for i in 1:size(m.simplices, 1)]
-    points = Makie.to_vertices(m.points)
-    mesh = GeometryBasics.Mesh(points, tris) 
+    tris = [GeometryBasics.TriangleFace(mesh.simplices[i, :]...) for i in 1:size(mesh.simplices, 1)]
+    points = Makie.to_vertices(mesh.points)
+    m = GeometryBasics.Mesh(points, tris) 
 
 
     lines = GeometryBasics.decompose(LineFace{Int}, tris)

@@ -1,13 +1,28 @@
-#File to build the discrete divergence and gradient as matrix operators 
+"
+This file contains the functions for the discrete divergence, gradient and convection. Furthermore, for the convection we include some regularisation, as detailed in [1]. 
 
-#Inputs for all functions are list of cells, faces and boundary faces 
+The detail of each function is given in my master thesis. 
 
-include("mesh_functions.jl")
+These operators should hold for both two and three dimensions. 
 
-#Function: Divergence 
-#Input: C, F: Vector of size nc and nf respectively 
-#list of cells and faces (where each face is only stored once)
-#Output: D Array of size nc x nf, divergence operator 
+[1] On restraining the prodvction of small scales of motion in a turbulent channel flow, R. Verstappen, 2008. 
+"
+
+
+"
+Function: 
+    Divergence 
+
+Input: 
+    C: Vector{Vector{Int}} (cell_list)
+    F: Vector{Vector{Int}} (face_list)
+
+Output: 
+    D: Matrix{Float}
+    of size nc x nf, where nc is the number of cells and nf the number of faces in the triangulation 
+
+In order to speed up computations, for each cell we only look at the faces surrounding it, and we do this using the cf_info dictionary.
+"
 function Divergence(C, F)
     nc = length(C)
     nf = length(F)
@@ -16,9 +31,7 @@ function Divergence(C, F)
         K = C[i]
         for j in cf_info[i]
             e = F[j]
-            if isFace(e,K)
-                D[i,j] = Volume(e)/Volume(K) * NormalIndicator(e,K)
-            end
+            D[i,j] = Volume(e)/Volume(K) * NormalIndicator(e,K)
         end
     end
     return D 
@@ -29,7 +42,21 @@ end
 #       BF: Vector of faces which also lie on the boundary 
 #list of cells and faces (where each face is only stored once)
 #Output: G Array of size nf x nc, gradient operator 
-function Gradient(C,F,BF)
+"
+Function: 
+    Gradient 
+
+Input: 
+    C: Vector{Vector{Int}} (cell_list)
+    F: Vector{Vector{Int}} (face_list)
+
+Output: 
+    G: Matrix{Float}
+    of size nf x nc
+
+In order to speed up computations, for each cell we only look at the faces surrounding it, and we do this using the cf_info dictionary.
+"
+function Gradient(C,F)
     nc = length(C)
     nf = length(F)
     G = spzeros(nf,nc)
@@ -37,49 +64,63 @@ function Gradient(C,F,BF)
         K = C[j]
         for i in cf_info[j]
             e = F[i]
-            if isFace(e,K)
-                G[i,j] = - NormalIndicator(e,K) / DualEdge(e)
-            end
+            G[i,j] = - NormalIndicator(e,K) / DualEdge(e)
         end
     end
     return G
 end
 
-#Function Convection 
-#Input: uf face-centred velocity 
-#       phi_c cell-centred vector to take the convection of 
-#Output: conv, the discretisation of u⋅∇ϕ 
-function Convection(uf,phi_c)
-    nc = length(cell_list)
-    conv = zeros(size(phi_c))
-    #Compute the gradient of phi_c 
-    Gphi_c = G*phi_c
+"
+Function: 
+    Convection 
+
+Input: 
+    uf: Vector{Float}
+        face-centred velocity 
+    vc: Matrix{Float}
+        cell-centred velocity of which we aim to take the convection
+
+Output: 
+    conv: Matrix{Float}
+        u⋅∇v, cell-centred convection of v
+
+In order to speed up computations, for each cell we only look at the faces surrounding it, and we do this using the cf_info dictionary.
+"
+function Convection(uf,vc)
+    conv = zeros(size(vc))
+    #Compute the gradient of vc 
+    Gvc = G*vc
     for i in 1:nc 
         local K = cell_list[i]
         for j in cf_info[i]
             e = face_list[j]
-            conv[i,:] += DualEdge(e) * Volume(e) * uf[j] * Gphi_c[j,:]
+            conv[i,:] += DualEdge(e) * Volume(e) * uf[j] * Gvc[j,:]
         end
     end
     return conv
 end
 
-#Regularised convections from  Verstappen 
-function RegularisedConvection(Filter,uf,uc,order::Int)
-    uc_filt = Filter * uc
-    uc_res = uc - uc_filt
-    uf_filt = CellToFaceInterpolation(Filter * uc)
+
+"
+The 2nd, 4th and 6th order regularisations from Verstappen (2008). These regularisations rely on some predefined filter. 
+
+If the order chosen is zero then this simply returns the convection defined above. 
+"
+function RegularisedConvection(Filter,uf,vc,order::Int)
+    vc_filt = Filter * vc
+    vc_res = vc - vc_filt
+    uf_filt = CellToFaceInterpolation(Filter * vc)
     uf_res = uf - uf_filt
     if order == 2
-        c2 = Filter*Convection(uf_filt,uc_filt)
+        c2 = Filter*Convection(uf_filt,vc_filt)
         return c2 
     elseif order == 4 
-        c4 = Convection(uf_filt,uc_filt) + Filter * Convection(uf_filt,uc_res) + Filter * Convection(uf_res,uc_filt)
+        c4 = Convection(uf_filt,vc_filt) + Filter * Convection(uf_filt,vc_res) + Filter * Convection(uf_res,vc_filt)
         return c4 
     elseif order == 6 
-        c6 = Convection(uf_filt,uc_filt) + Convection(uf_filt,uc_res) + Convection(uf_res,uc_filt) + Filter * Convection(uf_res,uc_res) 
+        c6 = Convection(uf_filt,vc_filt) + Convection(uf_filt,vc_res) + Convection(uf_res,vc_filt) + Filter * Convection(uf_res,vc_res) 
         return c6 
     elseif order == 0
-        return Convection(uf,uc)
+        return Convection(uf,vc)
     end
 end

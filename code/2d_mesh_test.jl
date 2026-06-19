@@ -50,12 +50,17 @@ global nv = length(vertex_list)
 
 # save("data/data_$(N).jld","faces", face_list,"bndfaces",boundary_list,"cells",cell_list)
 
+"
+Build the dictionaries vc_info and cf_info. These are respectively vertex-to-cell information and cell-to-face information.
 
-#%%
-#Indices for each cell containing the i-th vertex, where the i-th entry corresponds to
-#the i-th vertex 
+vc_info contains the indices of each cell containing a certain vertex. In other words, vc_info[i] gives the indices of the cell containing vertex i. 
+
+cf_info contains the indices of the faces bordering a cell. In other words, cf_info[i] gives the indices of the faces around cell i. 
+
+These dictionaries are implemented to speed up computation time when finding all the faces of a cell or when finding the cells sharing a face. 
+"
 vc_info = Dict{Int,Array{Int,1}}()
-for i = 1:nc 
+for i in eachindex(cell_list)
     local K = cell_list[i]
     for j in K 
         if j ∉ keys(vc_info) 
@@ -65,13 +70,11 @@ for i = 1:nc
         end
     end
 end
-vc_info
 
-#gives the faces indices around each cell index 
 cf_info = Dict{Int,Array{Int,1}}()
-for i = 1:nf 
+for i in eachindex(face_list)
     local e = face_list[i]
-    cell_inds = AdjAux(e)
+    cell_inds = AdjInds(e)
     for j in cell_inds
         if j ∉ keys(cf_info) 
             cf_info[j] = [i]
@@ -79,9 +82,7 @@ for i = 1:nf
             push!(cf_info[j],i)
         end
     end
-end
-cf_info
-
+end 
 
 
 #%%
@@ -110,14 +111,14 @@ yf = zeros(nf)
 
 for i = 1:nc 
     local K = cell_list[i]
-    local p = Circumcenter(K)
+    local p = Circumcentre(K)
     xc[i] = p[1]
     yc[i] = p[2]
 end
 
 for i=1:nf 
     local e = face_list[i]
-    local p = Circumcenter(e)
+    local p = Circumcentre(e)
     xf[i] = p[1]
     yf[i] = p[2]
 end

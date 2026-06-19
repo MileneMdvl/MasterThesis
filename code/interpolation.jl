@@ -1,49 +1,24 @@
-#File to implement the interpolation for either: 
-# - face centers to vertices 
-# - cell centers to vertices 
-# - face centers to cell centers 
-# - cell centers to face centers
+"
+This file contains the functions to implement the face-to-cell and cell-to-face interpolations. Both my interpolation and the one from Trias et al. [1] are implemented, with the toggle Trias to change between the two. 
 
-#Inputs are lists of vertices (V), cells (C), faces (F) and boundary faces (BF)
+[1] Symmetry-preserving discretization of Navier-Stokes equations on collocated unstructured grids, F. X. Trias et al., 2014. 
+"
 
-include("mesh_functions.jl")
+"
+Function: 
+    FaceToCellInterpolation
 
-# #Function: VertexInterpolation
-# #Input: phi, vector of either cell-centred of face-centred values 
-# #Output: phi_v, vector of values at vertices 
-# function VertexInterpolation(phi)
-#     nn = length(phi) #either nn = nc or nn = nf 
-#     phi_v = zeros(nv)
-#     if nn == length(cell_list)
-#         type = "cell"
-#         local list = cell_list
-#     elseif  nn == length(face_list)
-#         type = "face"
-#         local list = face_list
-#     else 
-#         println("Error: vector to be interpolated should be defined on cell-centres of face-centres")
-#         return 
-#     end
-#     for i in 1:nv 
-#         list_with_vertex = WithVertex(i,type)
-#         num = 0
-#         denom = 0
-#         for j in 1:nn
-#             A = list[j]
-#             if A in list_with_vertex 
-#                 num += phi[j] * Volume(A) 
-#                 denom += Volume(A)
-#             end
-#         end
-#         phi_v[i] = num/denom 
-#     end
-#     return phi_v 
-# end
+Input: 
+    phi_f: Vector{Float}
+        face-centred vector 
+    Trias: Boolean 
+        if true, then the interpolation from [1] is computed 
+        if false, then the interpolation is the one given in my master thesis
 
-
-#Function FaceToCellInterpolation
-#Input: phi_f, face-centred vector 
-#Output: phi_c, cell-centred vector 
+Output: 
+    phi_c: Matrix{Float}
+        cell-centred matrix (in the case of the velocity which has components in each spatial direction)
+"
 function FaceToCellInterpolation(phi_f,Trias=false)
     nf = length(face_list)
     nc = length(cell_list)
@@ -77,6 +52,23 @@ end
 #Input:  phi_c, cell-centred matrix, of dimension nc * d 
 #        where d is the dimension of the problem 
 #Output: phi_f, face-centred vector
+"
+Function: 
+    FaceToCellInterpolation
+
+Input: 
+    phi_c: Matrix{Float}
+        cell-centred matrix (in the case of the velocity, otherwise it is simply a vector)
+    Trias: Boolean 
+        if true, then the interpolation from [1] is computed 
+        if false, then the interpolation is the one given in my master thesis
+
+Output: 
+    phi_f: Vector{Float}
+        face-centred vector
+
+Furthermore, note that here the cell-to-face interpolation also includes the Neumann boundary conditions (as explained in the thesis)
+"
 function CellToFaceInterpolation(phi_c,Trias=false)
     d = length(face_list[1])
     nf = length(face_list)
@@ -90,7 +82,7 @@ function CellToFaceInterpolation(phi_c,Trias=false)
         e = face_list[i]
         num = 0
         denom = 0
-        for j in AdjAux(e)
+        for j in AdjInds(e)
             K = cell_list[j]
             if e ∉ boundary_list
                 if Trias 
