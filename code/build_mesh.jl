@@ -4,11 +4,28 @@
 # - num_pts: Int: number of vertices desired for the triangulation 
 # - bnd = the localisation of the 4 boundary vertices for the domain 
 # - plot: Boolean, whether to make a plot or not 
+"
+This file contains the functions to generate points and build a triangulation. There are two options for points generation: random or regular. So far, the point generation only holds for a 2-dimensional domain. 
+
+The triangulation uses the package Delaunay: https://github.com/eschnett/Delaunay.jl 
+
+
+"
 
 using Meshes
 using Delaunay, GeometryBasics
 using Random, Distributions
 
+"
+Function: 
+    
+
+Input: 
+    
+
+Output: 
+    
+"
 function BuildTriangulation(points)
     mesh = Delaunay.delaunay(points)
 

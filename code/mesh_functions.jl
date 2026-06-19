@@ -1,33 +1,49 @@
-#This file contains all the functions needed for e.g. divergence and gradient
-#that rely only on the given discrete mesh (either 2D or 3D)
+"
+This file contains the functions to extract information from the triangulated mesh. It assumes that the 'vertex_list', 'face_list', 'boundary_list' and 'cell_list' lists from the file 'build_mesh.jl' are already stored in memory. These lists need to be of type Vector{Vector{Int}}. 
 
-#To do: - fix the comments (across all files!)
+This file must then be run after 'build_mesh.jl'. 
 
-#Variables considered as inputs are: 
-#d:                dimension of the problem (2 or 3)
-#K of size (d+1):  cell (triangle or tetrahedron)
-#e of size d:      edge of a cell (line or triangle)
+All functions are explained with regards to their inputs, outputs, and what they do concretely. 
 
-#vertex_list: Array of positions of all vertices in the discretisation
-#face_list:   Array of labels of all faces
-#cell_list:   Array of labels of all cells 
+All functions hold for both 2 and 3-dimensional domains, i.e. whether cells are triangles or tetrahedra, and whether faces are lines or triangles. 
 
-#These are the outputs of the functions Build2DMesh and Build3DMesh from the
-#file "build_mesh.jl"
+This file is needed for 'divgrad.jl'. 
+"
 
 using LinearAlgebra
 
-#Function: CyclicPermutations
-#Input: A Array
-#Output: Vector of Vectors : all cyclic permutations of A 
+"
+Function: 
+    CyclicPermutations
+
+Input: 
+    A: Vector{Int}
+    either a face or a cell 
+
+Output: 
+    PA: Vector{Vector{Int}}
+    all cyclic permutations of A stored as vectors inside a vector
+
+This functions is required in order for boundary_list to be a subset of face_list
+"
 function CyclicPermutations(A)
     perms = [circshift(A, i) for i in eachindex(A)]
     return perms 
 end
 
-#Function UniqueList 
-#Input: list Array
-#Output: unique_list Array of unique values of list
+"
+Function: 
+    UniqueList
+
+Input: 
+    list: Vector{Vector{Int}}
+
+Output: 
+    unique_list: Vector{Vector{Int}}
+    the unique elements in the list, i.e. if the list contains both [a,b] and [b,a] then unique_list contains only [a,b]. 
+
+This function is required for boundary_list and face_list to only store each face once 
+"
 function UniqueList(list)
     unique_list = copy(list)
     nn = length(list[1])
@@ -41,21 +57,45 @@ function UniqueList(list)
     return unique_list
 end
 
-#Function: VerticesCoordinates
-#Input: A Array of vertices: cell or face 
-#Output: P Array of points: coordinates of vertices of A 
+"
+Function: 
+    VerticesCoordinates
+
+Input: 
+    A: Vector{Int}
+    either a cell or a face 
+
+Output: 
+    P: Matrix{Float}
+    P has dimension length(A) x d, where d is the dimension of the domain 
+    P[i,:] is the vector of coordinates of vertex A[i] 
+
+This function collects the coordinates of all vertices, used when determining geometric properties such as volume, area, circumcentre, etc. 
+"
 function VerticesCoordinates(A)
-    P = zeros(length(A),2)
+    d = length(vertex_list[1])
+    P = zeros(length(A),d)
     for i in eachindex(A)
         P[i,:] = vertex_list[A[i]]
     end
     return P
 end
 
+"
+Function: 
+    Volume
 
-#Function: Volume 
-#Input: A Array of vertices: cell or face to take the volume of 
-#Output: |A| Float: Volume of A
+Input: 
+    A: Vector{Int}
+    either a face or a cell
+
+Output: 
+    |A| Float 
+    volume/area/length of A, depending on if A has four/three/two vertices 
+
+This functions computes |K|, |e| for K cell and e face, needed for e.g. divergence/gradient. 
+This function calls AreaTriangle and VolumeTetrahedron if needed, and computes the length of an edge from the Euclidean norm.
+"
 function Volume(A)
     nn = length(A)
     P = VerticesCoordinates(A)
@@ -71,9 +111,18 @@ function Volume(A)
     end
 end
 
-#Function: AreaTriangle (using Heron's formula)
-#Input: p₁, p₂, p₃, points coordinates 
-#Output: a Float: area of the triangle formed by these points 
+"
+Function: 
+    AreaTriangle
+
+Input: 
+    p₁, p₂, p₃: Float 
+    coordinates of the vertices of a triangle
+
+Output: 
+    a: Float 
+    area of the triangle, using Heron's formula
+"
 function AreaTriangle(p₁, p₂, p₃)
     #Compute the length of each edge 
     l = zeros(3)
@@ -93,9 +142,18 @@ function AreaTriangle(p₁, p₂, p₃)
     return sqrt(a)
 end
 
-#Function: VolumeTetrahedron
-#Input: p₁, p₂, p₃, p₄, points coordinates 
-#Output: v Float: volume of the tetrahedron formed by these points 
+"
+Function: 
+    VolumeTetrahedron
+
+Input: 
+    p₁, p₂, p₃, p₄: Float 
+    coordinates of the vertices of a tetrahedron
+
+Output: 
+    v: Float 
+    volume of the tetrahedron
+"
 function VolumeTetrahedron(p₁, p₂, p₃, p₄)
     p = [p₁, p₂, p₃, p₄]
     Mat = Matrix{Float64}(undef, 4, 4)
@@ -109,11 +167,19 @@ function VolumeTetrahedron(p₁, p₂, p₃, p₄)
     return v
 end
 
-#Function: Circumcenter 
-#Input:  A Vector of size nn (face or cell)
-#Output: c Array: coordinates of circumcenter 
-#if 2D: c = [cx, cy], if 3D: c = [cx, cy, cz]
-function Circumcenter(A)
+"
+Function: 
+    Circumcentre 
+
+Input: 
+    A: Vector{Int}
+    either a face or a cell 
+
+Output: 
+    c: Vector{Float}
+    coordinates of the circumcentre in d-dimensions 
+"
+function Circumcentre(A)
     nn = length(A)
 
     #Get coordinates of points 
@@ -186,9 +252,21 @@ function Circumcenter(A)
     end
 end
 
-#Function: Circumradius
-#Input: K cell 
-#Output: R circumradius of cell K 
+"
+Function: 
+    Circumradius 
+
+Input: 
+    K: Vector{Int}
+    a cell 
+
+Output: 
+    R: Float 
+    radius of the circumcentre 
+
+Needed when computing the length of the dual edge for boundary faces. 
+This function calls Faces. 
+"
 function Circumradius(K) 
     e_K = Faces(K)
     R = 1 / (4 * Volume(K))
@@ -199,9 +277,20 @@ function Circumradius(K)
     return R
 end
 
-#Function: DualEdge
-#Input: e Vector of size (n-1): primal face
-#Output: |ê| Scalar: length of dual edge 
+"
+Function: 
+    DualEdge
+
+Input: 
+    e: Vector{Int}
+    a face 
+
+Output: 
+    |̂e| Float
+    lengths of the dual edge to e 
+
+This function calls Adjacent, Circumcentre and Circumradius (if e is a boundary face)
+"
 function DualEdge(e)
     #Get the labels for the two adjacent cells  
     adj = Adjacent(e)
@@ -212,26 +301,44 @@ function DualEdge(e)
         R = Circumradius(K)
         dual = 2 * sqrt(R^2 - Volume(e)^2 / 4)
     else
-        #Get the circumcenters of the adjacent triangles 
-        cK = Circumcenter(K)
-        cL = Circumcenter(L)
+        #Get the circumcentres of the adjacent triangles 
+        cK = Circumcentre(K)
+        cL = Circumcentre(L)
         dual = LinearAlgebra.norm(cK - cL) 
     end
     return dual 
 end
 
-#return faces (indices) around a cell (vector)
+"
+Function: 
+    FacesInd 
+
+Input: 
+    K: Vector{Int}
+    a cell
+
+Output: 
+    inds_e_K: 
+    indices of the faces within face_list that border the cell K 
+
+This functions is required to speed up computations when finding the faces on the boundary of a given cell. It uses the dictionaries vc_info and cf_info. 
+"
 function FacesInd(K)
-    d = length(K) - 1 
+    #Get the number of vertices that make up K 
+    nK = length(K) 
     
+    #Find the vertices a,b,c such that K = [a,b,c]
+    #First, find the vertices a,b, and intersect their cell info to get the
+    #index of the face [a,b]
     vc_a = vc_info[K[1]]
     vc_b = vc_info[K[2]]
     inter = intersect(vc_a,vc_b)
-
+    #Then, find the vertex c and intersect to find the indices of [a,c] and [b,c]
     vc_c = vc_info[K[3]]
     inter = intersect(inter,vc_c)
 
-    if d == 3
+    if nK == 4
+        #If K is a tetrahedron then proceed once again 
         vc_d = vc_info[K[4]]
         inter = intersect(inter,vc_d)
     end
@@ -242,23 +349,24 @@ end
 #Function Faces
 #Input: K Vector of size (d+1): cell to find the boundary of 
 #Output e_K Matrix of size (d+1)*d: Matrix of Vectors of faces
+"
+Function: 
+    Faces
+
+Input: 
+    K: Vector{Int}
+    a cell
+
+Output: 
+    e_K: Matrix{Int}
+    e_K if of size length(K) x d where d is the dimension of the domain 
+    it contains the vertices of the faces bordering cell K 
+
+This function calls FacesInd. 
+"
 function Faces(K)
     d = length(K) - 1
-    # KK = CyclicPermutations(K)
     e_K = zeros(Int,d+1,2)
-    # for i in 1:(d+1) 
-    #     e = KK[i][1:d] 
-    #     if e in face_list
-    #         e_K[i,:] = e
-    #     else 
-    #         ee = CyclicPermutations(e)
-    #         for e in ee 
-    #             if e in face_list
-    #                 e_K[i,:] = e 
-    #             end
-    #         end
-    #     end
-    # end
 
     faces_ind = FacesInd(K)
     for i in eachindex(faces_ind)
@@ -267,10 +375,19 @@ function Faces(K)
     return e_K
 end
 
-#Function isFace
-#Input: e Vector of size d: face
-#       K Vector of size (d+1): cell 
-#Output: Boolean, true if e ∈ ∂K 
+"
+Function: 
+    isFace
+
+Input: 
+    e: Vector{Int}
+    K: Vector{Int}
+    a face and a cell
+
+Output: 
+    Boolean
+    true if e is on the boundary of K 
+"
 function isFace(e,K)
     e_K = Faces(K)
     istrue = false
@@ -282,32 +399,44 @@ function isFace(e,K)
     return istrue 
 end
 
-#Function: WithVertex
-#Input: v Int: vertex label
-#       type String: either 'cell' or 'face'
-#Output: A Array of cells/faces with vertex i 
-function WithVertex(v,type::String)
-    local list = []
-    if type == "cell"
-        for K in cell_list
-            if v in K 
-                push!(list,K)
-            end
-        end
-    elseif type == "face"
-        for e in face_list 
-            if v in e 
-                push!(list,e)
-            end
-        end
-    else 
-        println("Error: type should either be 'cell' or 'face'")
-    end
-    return list 
-end
+# #Function: WithVertex
+# #Input: v Int: vertex label
+# #       type String: either 'cell' or 'face'
+# #Output: A Array of cells/faces with vertex i 
+# function WithVertex(v,type::String)
+#     local list = []
+#     if type == "cell"
+#         for K in cell_list
+#             if v in K 
+#                 push!(list,K)
+#             end
+#         end
+#     elseif type == "face"
+#         for e in face_list 
+#             if v in e 
+#                 push!(list,e)
+#             end
+#         end
+#     else 
+#         println("Error: type should either be 'cell' or 'face'")
+#     end
+#     return list 
+# end
 
-#COMMENT
-function AdjAux(e)
+"
+Function: 
+    AdjInds
+
+Input: 
+    e: Vector{Int}
+
+Output: 
+    inds_K_e: Vector{Int}
+    indices of cells K and L within cell_list such that these cells are adjacent to e
+
+If e is a boundary face, then this function only returns the index of K. It uses the dictionary vc_info. 
+"
+function AdjInds(e)
     d = length(e)
     adj = Array{Int,1}()
     vc_a = vc_info[e[1]]
@@ -320,36 +449,42 @@ function AdjAux(e)
     return inter 
 end
 
-#Function: Adjacent 
-#Input: e Vector of size d: face 
-#Output: [K; L] Matrix of size 2*(d+1): adjacent cells
+"
+Function: 
+    Adjacent
+
+Input: 
+    e: Vector{Int}
+    a face
+
+Output: 
+    [K; L] Matrix{Int}
+    vertices of the adjacent cells
+
+If e is a boundary face, then L = 0. This function calls AdjInds. 
+"
 function Adjacent(e)
     d = length(e) 
     adjacent_cells = zeros(Int,2,d+1)
-    cells = AdjAux(e)
+    cells = AdjInds(e)
     for i in eachindex(cells)
         adjacent_cells[i,:] = cell_list[cells[i]]
     end
-
-    # #If e is on the domain boundary, set the second adjacent cell to [0]ₙ
-    # if e in boundary_list
-    #     [adjacent_cells[2,i] = 0 for i in 1:(d+1)]
-    # end 
-
-    # #Find the adjacent cells to edge e
-    # i = 1
-    # for j in eachindex(cell_list)
-    #     if e ⊆ cell_list[j] 
-    #         adjacent_cells[i,:] = cell_list[j]
-    #         i+=1
-    #     end
-    # end
     return adjacent_cells
 end
 
-#Function: NormalVector
-#Input: e Vector of size d: face 
-#Output: nₑ normal vector to face e 
+"
+Function: 
+    NormalVector
+
+Input: 
+    e: Vector{Int}
+    a face 
+
+Output: 
+    n_e: Vector{Float}
+    the outward normal vector to face e in d-dimension 
+"
 function NormalVector(e)
     d = length(e)
     if d == 2 
@@ -374,6 +509,20 @@ end
 #       K Vector of size d+1: cell 
 #Output: indicator = ±1 Int 
 # +1 if normal at e is outward to cell K and -1 if it is inward
+"
+Function: 
+    NormalIndicator
+
+Input: 
+    e: Vector{Int}; K: Vector{Int}
+    a cell and a face
+
+Output: 
+    indicator: ± 1
+    positive if n_e is outward to K 
+    
+This function calls the function NormalVector, and determines if it is inward or outward to the cell. It also returns an error if the given face is not on the boundary of the given cell. 
+"
 function NormalIndicator(e,K)
     d = length(e)
     #Check if e is a face 

@@ -23,7 +23,7 @@ include("interpolation.jl")
 include("manufactured_sol.jl")
 include("build_mesh.jl")
 ##
-N = 6
+N = 382
 dx = 1/N
 # pts = GenerateRandomPoints(N)
 global pts = RegularPoints(N)
@@ -40,11 +40,14 @@ Makie.wireframe!(ax1,mesh,transparency = true)
 Makie.scatter!(ax1,points)
 
 display(fig)
+save("figures/regularmesh_$(N).pdf", fig, px_per_unit = 1)
 
 #%%
 global nf = length(face_list)
 global nc = length(cell_list)
 global nv = length(vertex_list)
+
+save("data/data_$(N).jld","faces", face_list,"bndfaces",boundary_list,"cells",cell_list)
 
 
 #%%
@@ -141,6 +144,7 @@ for i = 1:nf
     local ne = NormalVector(face_list[i])
     uf0[i] = dot(ue,ne)
 end
+save("data/data_$(N).jld","pc0",pc0,"uf0",uf0,"uc0",uc0)
 #%%
 #Time marching 
 Nt = N 
@@ -193,7 +197,7 @@ for t in tqdm(1:Nt)
         break
     end
 end
-save("data/data_$(N).jld","pc",pc,"uc",uc,"uf",uf,"pc0",pc0,"uf0",uf0,"uc0",uc0,"norm_u",norm_u,"norm_p",norm_p)
+save("data/data_$(N).jld","pc",pc,"uc",uc,"uf",uf)
 
 
 println("At last time step:")

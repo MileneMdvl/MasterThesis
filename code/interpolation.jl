@@ -8,37 +8,37 @@
 
 include("mesh_functions.jl")
 
-#Function: VertexInterpolation
-#Input: phi, vector of either cell-centred of face-centred values 
-#Output: phi_v, vector of values at vertices 
-function VertexInterpolation(phi)
-    nn = length(phi) #either nn = nc or nn = nf 
-    phi_v = zeros(nv)
-    if nn == length(cell_list)
-        type = "cell"
-        local list = cell_list
-    elseif  nn == length(face_list)
-        type = "face"
-        local list = face_list
-    else 
-        println("Error: vector to be interpolated should be defined on cell-centres of face-centres")
-        return 
-    end
-    for i in 1:nv 
-        list_with_vertex = WithVertex(i,type)
-        num = 0
-        denom = 0
-        for j in 1:nn
-            A = list[j]
-            if A in list_with_vertex 
-                num += phi[j] * Volume(A) 
-                denom += Volume(A)
-            end
-        end
-        phi_v[i] = num/denom 
-    end
-    return phi_v 
-end
+# #Function: VertexInterpolation
+# #Input: phi, vector of either cell-centred of face-centred values 
+# #Output: phi_v, vector of values at vertices 
+# function VertexInterpolation(phi)
+#     nn = length(phi) #either nn = nc or nn = nf 
+#     phi_v = zeros(nv)
+#     if nn == length(cell_list)
+#         type = "cell"
+#         local list = cell_list
+#     elseif  nn == length(face_list)
+#         type = "face"
+#         local list = face_list
+#     else 
+#         println("Error: vector to be interpolated should be defined on cell-centres of face-centres")
+#         return 
+#     end
+#     for i in 1:nv 
+#         list_with_vertex = WithVertex(i,type)
+#         num = 0
+#         denom = 0
+#         for j in 1:nn
+#             A = list[j]
+#             if A in list_with_vertex 
+#                 num += phi[j] * Volume(A) 
+#                 denom += Volume(A)
+#             end
+#         end
+#         phi_v[i] = num/denom 
+#     end
+#     return phi_v 
+# end
 
 
 #Function FaceToCellInterpolation
