@@ -23,23 +23,28 @@ include("interpolation.jl")
 include("manufactured_sol.jl")
 include("build_mesh.jl")
 ##
-N = 6
+
+N = 384
 dx = 1/N
 # pts = GenerateRandomPoints(N)
 global pts = RegularPoints(N)
 
 global points, mesh, vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(pts)
 
-CairoMakie.activate!()
-set_theme!(theme_latexfonts())
+# CairoMakie.activate!()
+# set_theme!(theme_latexfonts())
 
-fig = Figure(fontsize = 12)
+# fig = Figure(fontsize = 12)
 
-ax1 = Axis(fig[1,1],title=latexstring("\\text{2D triangulated mesh with $(length(points)) vertices}"))
-Makie.wireframe!(ax1,mesh,transparency = true)
-Makie.scatter!(ax1,points)
+#%%
+save("data/meshdata_$(N).jld","cells",cell_list,"faces",face_list,"bnd_faces",boundary_list)
 
-display(fig)
+
+# ax1 = Axis(fig[1,1],title=latexstring("\\text{2D triangulated mesh with $(length(points)) vertices}"))
+# Makie.wireframe!(ax1,mesh,transparency = true)
+# Makie.scatter!(ax1,points)
+
+# display(fig)
 # save("figures/regularmesh_$(N).pdf", fig, px_per_unit = 1)
 
 
@@ -47,8 +52,6 @@ display(fig)
 global nf = length(face_list)
 global nc = length(cell_list)
 global nv = length(vertex_list)
-
-# save("data/data_$(N).jld","faces", face_list,"bndfaces",boundary_list,"cells",cell_list)
 
 "
 Build the dictionaries vc_info and cf_info. These are respectively vertex-to-cell information and cell-to-face information.
@@ -87,7 +90,7 @@ end
 
 #%%
 global D = Divergence(cell_list,face_list)
-global G = Gradient(cell_list,face_list,boundary_list)
+global G = Gradient(cell_list,face_list)
 # StaggeredVol = spzeros(nf,nf)
 # for i = 1:nf 
 #     e = face_list[i]
@@ -146,7 +149,6 @@ for i = 1:nf
     local ne = NormalVector(face_list[i])
     uf0[i] = dot(ue,ne)
 end
-# save("data/data_$(N).jld","pc0",pc0,"uf0",uf0,"uc0",uc0)
 #%%
 #Time marching 
 Nt = N 
@@ -187,7 +189,7 @@ for t in tqdm(1:Nt)
 
     global uc = FaceToCellInterpolation(uf)
 
-    norm_div[t] = norm(D*uf)
+    norm_div[t] = norm(D*uf)/sqrt(nf)
     norm_u[t] = norm(uf-uf0)/sqrt(nc)
 
     if isnan(norm_div[t])
@@ -199,7 +201,8 @@ for t in tqdm(1:Nt)
         break
     end
 end
-# save("data/data_$(N).jld","pc",pc,"uc",uc,"uf",uf)
+
+# save("data/data_$(N).jld","norm_u",norm_u,"norm_p",norm_p,"norm_div",norm_div)
 
 
 println("At last time step:")
@@ -207,47 +210,48 @@ println("||u-u0||   = ",norm_u[end])
 println("||∇⋅u||    = ",norm_div[end])
 println("||p-p0||   = ",norm_p[end])
 
-CairoMakie.activate!()
-set_theme!(theme_latexfonts())
+# CairoMakie.activate!()
+# set_theme!(theme_latexfonts())
 
-xlims = nothing
-# xlims = (10,50)
+# xlims = nothing
+# # xlims = (10,50)
 
-fig = Figure(fontsize = 12,size = (900, 700))
+# fig = Figure(fontsize = 12,size = (900, 700))
 
-Label(fig[0,1:2],fontsize=14,latexstring("Re = $(Re),\\ N = $(N),\\ dt = $(round(dt,digits=5)),\\ dx = $(round(dx,digits=5))"))
+# Label(fig[0,1:2],fontsize=14,latexstring("Re = $(Re),\\ N = $(N),\\ dt = $(round(dt,digits=5)),\\ dx = $(round(dx,digits=5))"))
 
-ax1 = Axis(fig[1,1],title=latexstring("\\text{2D triangulated mesh with $(length(points)) vertices}"))
-Makie.wireframe!(ax1,mesh,transparency = true)
-Makie.scatter!(ax1,points)
+# ax1 = Axis(fig[1,1],title=latexstring("\\text{2D triangulated mesh with $(length(points)) vertices}"))
+# Makie.wireframe!(ax1,mesh,transparency = true)
+# Makie.scatter!(ax1,points)
 
-ax2 = Axis(fig[1,2],
-    limits = (xlims, nothing),
-    title=latexstring("\\text{Velocity divergence norm}"), 
-    # yscale=log10,
-    xlabel = "Time iterates",
-    ylabel = L"||Du_f||_2",
-    )
-Makie.lines!(ax2,norm_div,linewidth=2)
+# ax2 = Axis(fig[1,2],
+#     limits = (xlims, nothing),
+#     title=latexstring("\\text{Velocity divergence norm}"), 
+#     # yscale=log10,
+#     xlabel = "Time iterates",
+#     ylabel = L"||Du_f||_2",
+#     )
+# Makie.lines!(ax2,norm_div,linewidth=2)
 
-ax3 = Axis(fig[2,1],
-    limits = (xlims, nothing),
-    title=latexstring("\\text{Velocity norm}"),
-    # yscale=log10,
-    xlabel = "Time iterates",
-    ylabel = L"||u_f-u_0||_2")
-Makie.lines!(ax3,norm_u,linewidth=2)
+# ax3 = Axis(fig[2,1],
+#     limits = (xlims, nothing),
+#     title=latexstring("\\text{Velocity norm}"),
+#     # yscale=log10,
+#     xlabel = "Time iterates",
+#     ylabel = L"||u_f-u_0||_2")
+# Makie.lines!(ax3,norm_u,linewidth=2)
 
-ax4 = Axis(fig[2,2],
-    limits = (xlims, nothing),
-    title=latexstring("\\text{Pressure norm}"),
-    yscale=log10,
-    xlabel = "Time iterates",
-    ylabel = L"||p_c-p_0||_2")
-Makie.lines!(ax4,norm_p,linewidth=2)
+# ax4 = Axis(fig[2,2],
+#     limits = (xlims, nothing),
+#     title=latexstring("\\text{Pressure norm}"),
+#     # yscale=log10,
+#     xlabel = "Time iterates",
+#     ylabel = L"||p_c-p_0||_2")
+# Makie.lines!(ax4,norm_p,linewidth=2)
 
-display(fig)
+# display(fig)
 # save("figures/N=$(N).pdf", fig, px_per_unit = 1)
+
 
 #%%
 #For the regularised convection 

@@ -18,7 +18,7 @@ const Re = 1600
 #Manufactured solution on [0,1] x [0,√3/2]
 u = cos(2*pi*x) * sin(4*pi*y/sqrt(3))
 v = - sin(2*pi*x) * cos(4*pi*y/sqrt(3))
-p = cos(2*pi*x) * cos(2*pi*y)
+p = cos(2*pi*x) * cos(4*pi*y/sqrt(3))
 
 #Define functions to evaluate the manufactured solutions at discrete x,y values 
 u_eval = eval(build_function(u,x,y))
