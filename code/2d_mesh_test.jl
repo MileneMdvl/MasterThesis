@@ -15,37 +15,41 @@ import LinearSolve as LS
 #To save the data 
 using JLD
 
-
+include("build_mesh.jl")
 include("mesh_functions.jl")
 include("divgrad.jl")
-include("sparse_operations.jl")
 include("interpolation.jl")
 include("manufactured_sol.jl")
-include("build_mesh.jl")
+
 ##
 
-N = 384
+N = 6
 dx = 1/N
-# pts = GenerateRandomPoints(N)
-global pts = RegularPoints(N)
 
-global points, mesh, vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(pts)
+# global pts = RegularPoints(N)
+
+# global points, mesh, vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(pts)
+
+# save("data/meshdata_$(N).jld","cells",cell_list,"faces",face_list,"bnd_faces",boundary_list,"vertices",vertex_list,"mesh",mesh,"points",points)
 
 # CairoMakie.activate!()
 # set_theme!(theme_latexfonts())
 
 # fig = Figure(fontsize = 12)
-
-#%%
-save("data/meshdata_$(N).jld","cells",cell_list,"faces",face_list,"bnd_faces",boundary_list)
-
-
 # ax1 = Axis(fig[1,1],title=latexstring("\\text{2D triangulated mesh with $(length(points)) vertices}"))
 # Makie.wireframe!(ax1,mesh,transparency = true)
 # Makie.scatter!(ax1,points)
 
 # display(fig)
 # save("figures/regularmesh_$(N).pdf", fig, px_per_unit = 1)
+#%%
+
+meshdata = load("data/meshdata_$(N).jld")
+
+cell_list = meshdata["cells"]
+face_list = meshdata["faces"]
+boundary_list = meshdata["bnd_faces"]
+vertex_list = meshdata["vertices"]
 
 
 #%%
@@ -91,14 +95,6 @@ end
 #%%
 global D = Divergence(cell_list,face_list)
 global G = Gradient(cell_list,face_list)
-# StaggeredVol = spzeros(nf,nf)
-# for i = 1:nf 
-#     e = face_list[i]
-#     StaggeredVol[i,i] = 1/Volume(e)   
-# end
-# G = - StaggeredVol * transpose(D)
-
-# G = -transpose(D)
 
 #Laplacian 
 global L = D*G
@@ -151,7 +147,7 @@ for i = 1:nf
 end
 #%%
 #Time marching 
-Nt = N 
+Nt = N
 dt = 1/Nt 
 
 # Nt = 100
@@ -167,6 +163,8 @@ where_max = zeros(Nt)
 
 uc = copy(uc0)
 uf = copy(uf0)
+#Test with Trias' interpolation
+Trias = false
 for t in tqdm(1:Nt)
     #Intermediate Velocity
     u_star_c = uc - dt * Convection(uf,uc) + dt/Re * L*uc - dt*fc 
@@ -174,7 +172,7 @@ for t in tqdm(1:Nt)
     # u_star_c = zeros(nc,2)
 
     #Solve the Poisson pressure problem 
-    u_star_f = CellToFaceInterpolation(u_star_c)
+    u_star_f = CellToFaceInterpolation(u_star_c,Trias)
     RHS = 1/dt * D*u_star_f
 
     prob = LS.LinearProblem(L,RHS)
@@ -187,10 +185,10 @@ for t in tqdm(1:Nt)
     # global uc = u_star_c - dt * FaceToCellInterpolation(G*pc)
     global uf = u_star_f - dt* G*pc
 
-    global uc = FaceToCellInterpolation(uf)
+    global uc = FaceToCellInterpolation(uf,Trias)
 
     norm_div[t] = norm(D*uf)/sqrt(nf)
-    norm_u[t] = norm(uf-uf0)/sqrt(nc)
+    norm_u[t] = norm(uc-uc0)/sqrt(nc)
 
     if isnan(norm_div[t])
         for i = t:Nt 
@@ -202,7 +200,7 @@ for t in tqdm(1:Nt)
     end
 end
 
-# save("data/data_$(N).jld","norm_u",norm_u,"norm_p",norm_p,"norm_div",norm_div)
+save("data/data_Trias_$(N).jld","norm_u",norm_u,"norm_p",norm_p,"norm_div",norm_div)
 
 
 println("At last time step:")

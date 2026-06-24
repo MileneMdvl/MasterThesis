@@ -1,109 +1,158 @@
 #File to build 3d triangulation and test with divergence and gradient
-#To do: 
-#      - Fix divgrad to take in tensors as input (Otherwise this file gives
-#      errors)
 
-using Meshes, CoordRefSystems, Unitless
+
+using Meshes
 using Delaunay, GeometryBasics
 using CairoMakie, GLMakie
 using Random, Distributions
 
-using NDimensionalSparseArrays
 include("divgrad.jl")
+include("build_mesh.jl")
+include("mesh_functions.jl")
+include("sparse_operations.jl")
 
-n_inside = 20 
-n_bnd = Int(floor(n_inside/10))
+#Testing if the duality condition is satisfied using random points 
+#First, 3D
+Ns = 15:20:315
+err3D = zeros(length(Ns))
+for iter in eachindex(Ns)
+    N = Ns[iter]
+    err = zeros(10)
+    for count = 1:10
+        points = Random3DPoints(20)
 
-points = rand(Uniform(0,1),n_inside,3)
-
-bnd = [0 0 0; 0 1 0; 1 0 0; 1 1 0; 0 0 1; 0 1 1; 1 0 1; 1 1 1]
+        points, mesh, vertex_list, face_list, boundary_list, cell_list = BuildTetrahedralisation(points)
 
 
-for j in 1:4
-    if j ≤ 2 
-        k = 1
-    elseif j > 2
-        k = 8
+        global nf = length(face_list)
+        global nc = length(cell_list)
+        global nv = length(vertex_list)
+
+        vc_info = Dict{Int,Array{Int,1}}()
+        for i in eachindex(cell_list)
+            local K = cell_list[i]
+            for j in K 
+                if j ∉ keys(vc_info) 
+                    vc_info[j] = [i]
+                else
+                    push!(vc_info[j],i)
+                end
+            end
+        end
+
+        cf_info = Dict{Int,Array{Int,1}}()
+        for i in eachindex(face_list)
+            local e = face_list[i]
+            cell_inds = AdjInds(e)
+            for j in cell_inds
+                if j ∉ keys(cf_info) 
+                    cf_info[j] = [i]
+                else
+                    push!(cf_info[j],i)
+                end
+            end
+        end 
+
+
+        global D = Divergence(cell_list,face_list)
+        global G = Gradient(cell_list,face_list)
+
+        #Laplacian 
+        global L = D*G
+
+        u = randn(nf)
+        p = randn(nc)
+
+        err[count] = InnerProdCell(D*u,p)+InnerProdFace(u,G*p)
     end
-    points_bnd = rand(Uniform(0,1),n_bnd,3)
-    [points_bnd[i,1] = bnd[k,1] for i in 1:n_bnd]
-    bnd = vcat(bnd,points_bnd)
 
-    points_bnd = rand(Uniform(0,1),n_bnd,3)
-    [points_bnd[i,2] = bnd[k,2] for i in 1:n_bnd]
-    bnd = vcat(bnd,points_bnd)
-
-    points_bnd = rand(Uniform(0,1),n_bnd,3)
-    [points_bnd[i,3] = bnd[k,3] for i in 1:n_bnd]
-    bnd = vcat(bnd,points_bnd)
+    err3D[iter] = mean(err)
 end
 
-points = vcat(points,bnd)
 
-mesh = Delaunay.delaunay(points)
+#Then 2D case 
+err2D = zeros(length(Ns))
+for iter in eachindex(Ns)
+    N = Ns[iter]
+    err = zeros(10)
+    for count = 1:10
+        points = RandomPoints(20)
 
-tetras = [GeometryBasics.TetrahedronFace(mesh.simplices[i, :]...) for i in 1:size(mesh.simplices, 1)]
-points = Makie.to_vertices(mesh.points)
-m = GeometryBasics.Mesh(points, tetras)  
+        points, mesh, vertex_list, face_list, boundary_list, cell_list = BuildTriangulation(points)
+
+        global nf = length(face_list)
+        global nc = length(cell_list)
+        global nv = length(vertex_list)
+
+        vc_info = Dict{Int,Array{Int,1}}()
+        for i in eachindex(cell_list)
+            local K = cell_list[i]
+            for j in K 
+                if j ∉ keys(vc_info) 
+                    vc_info[j] = [i]
+                else
+                    push!(vc_info[j],i)
+                end
+            end
+        end
+
+        cf_info = Dict{Int,Array{Int,1}}()
+        for i in eachindex(face_list)
+            local e = face_list[i]
+            cell_inds = AdjInds(e)
+            for j in cell_inds
+                if j ∉ keys(cf_info) 
+                    cf_info[j] = [i]
+                else
+                    push!(cf_info[j],i)
+                end
+            end
+        end 
+
+        #%%
+
+        global D = Divergence(cell_list,face_list)
+        global G = Gradient(cell_list,face_list)
+
+        #Laplacian 
+        global L = D*G
+
+        #%%
+        u = randn(nf)
+        p = randn(nc)
+
+        err[count] = InnerProdCell(D*u,p)+InnerProdFace(u,G*p)
+    end
+
+    err2D[iter] = mean(err)
+end
+
 
 CairoMakie.activate!()
-fig = Figure()
-ax = Axis3(fig[1,1],title="3D triangulated mesh")
-wireframe!(ax,m,transparency = true)
-scatter!(points)
+set_theme!(theme_latexfonts())
+
+
+fig = Figure(fontsize = 11,size = (700,300))
+
+Label(fig[0,1:2],fontsize=14,latexstring("\\text{Sum of the inner products } ⟨u,∇p⟩+⟨∇⋅u,p⟩"))
+
+colgap!(fig.layout, 1, Relative(0.15))
+
+ax1 = Axis(fig[1,1],
+    title=latexstring("\\text{2D}"),
+    xlabel = L"N",
+    ylabel =L"⟨u,∇p⟩+⟨∇⋅u,p⟩",
+    )
+Makie.lines!(ax1,Ns,err2D,linewidth=2)
+# Makie.scatter!(ax1,Ns,err2D)
+
+ax2 = Axis(fig[1,2],
+    title=latexstring("\\text{3D}"),
+    xlabel = L"N",
+    ylabel =L"⟨u,∇p⟩+⟨∇⋅u,p⟩",
+    )
+Makie.lines!(ax2,Ns,err3D,linewidth=2)
+# Makie.scatter!(ax2,Ns,times_N)
+
 display(fig)
-
-tris = GeometryBasics.decompose(TriangleFace{Int}, tetras)
-face_list = collect([tris[i][1], tris[i][2], tris[i][3]] for i in 1:size(tris,1))
-
-for e in face_list
-ee = CyclicPermutations(e)
-for i in eachindex(e)
-    if ee[i] ∉ face_list
-        push!(face_list,ee[i])
-    end
-end
-end
-
-boundary_list = collect(mesh.convex_hull[i,:] for i in 1:size(mesh.convex_hull,1))
-for e in boundary_list
-ee = CyclicPermutations(e)
-for i in eachindex(e)
-    if ee[i] ∉ boundary_list
-        push!(boundary_list,ee[i])
-    end
-end
-end
-
-cell_list = collect(mesh.simplices[i,:] for i in 1:size(mesh.simplices,1))
-vertex_list = collect(mesh.points[i,:] for i in 1:size(mesh.points,1))
-
-np = length(vertex_list)
-
-u = NDSparseArray{Float64}(np, np, np) 
-for e in face_list
-    u[e[1],e[2],e[3]] = e[1]*e[2]*e[3]
-    if e in boundary_list 
-        u[e[1],e[2],e[3]] = 0
-    end
-end
-
-p = NDSparseArray{Float64}(np, np, np, np) 
-for K in cell_list
-    p[K[1],K[2],K[3],K[4]] = K[1]*K[2]
-end
-
-divu = NDSparseArray{Float64}(np, np, np, np) 
-for K in cell_list
-    divu[K[1],K[2],K[3],K[4]] = Divergence(u,K)
-end
-
-gradp = NDSparseArray{Float64}(np, np, np) 
-for e in face_list 
-    if e ∉ boundary_list
-        gradp[e[1],e[2],e[3]] = Gradient(p,e)
-    end
-end
-
-println("(p,div(u))ₖ   = ",SparseInnerProduct(p,divu,"cell"))
-println("-(u,grad(p))ₑ = ",-SparseInnerProduct(u,gradp,"face"))
+save("figures/duality condition.pdf", fig, px_per_unit = 1)

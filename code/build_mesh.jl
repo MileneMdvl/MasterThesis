@@ -53,7 +53,7 @@ function BuildTriangulation(pts)
     lines = GeometryBasics.decompose(LineFace{Int}, tris)
 
     #Store the faces 
-    #First store all cyclic permuations of faces 
+    #Only store a face once
     face_list = collect([lines[i][1], lines[i][2]] for i in 1:size(lines,1))
     face_list = UniqueList(face_list)
 
@@ -207,6 +207,82 @@ end
 
 
 
-# function BuildTetrahedralisation()
+function BuildTetrahedralisation(points)
+    mesh = Delaunay.delaunay(points)
 
-# end
+    tetras = [GeometryBasics.TetrahedronFace(mesh.simplices[i, :]...) for i in 1:size(mesh.simplices, 1)]
+    points = Makie.to_vertices(mesh.points)
+    m = GeometryBasics.Mesh(points, tetras)  
+
+    # CairoMakie.activate!()
+    # fig = Figure()
+    # ax = Axis3(fig[1,1],title="3D triangulated mesh")
+    # wireframe!(ax,m,transparency = true)
+    # scatter!(points)
+    # display(fig)
+
+    tris = GeometryBasics.decompose(TriangleFace{Int}, tetras)
+    face_list = collect([tris[i][1], tris[i][2], tris[i][3]] for i in 1:size(tris,1))
+    face_list = UniqueList(face_list)
+
+    boundary_list = collect(mesh.convex_hull[i,:] for i in 1:size(mesh.convex_hull,1))
+    for e in boundary_list
+        ee = CyclicPermutations(e)
+        for i in eachindex(e)
+            if ee[i] ∉ boundary_list
+                push!(boundary_list,ee[i])
+            end
+        end
+    end
+    #Then, only keep those which are in the same order as in the list of faces 
+    ind = []
+    for i in eachindex(boundary_list)
+        local e = boundary_list[i]
+        if e ∉ face_list
+            push!(ind,i)
+        end
+    end
+    deleteat!(boundary_list,ind)
+    boundary_list = UniqueList(boundary_list)
+
+    cell_list = collect(mesh.simplices[i,:] for i in 1:size(mesh.simplices,1))
+    vertex_list = collect(mesh.points[i,:] for i in 1:size(mesh.points,1))
+
+    return points, m, vertex_list, face_list, boundary_list, cell_list
+end
+
+function Random3DPoints(N)
+    bnd = [0 0 0; 0 1 0; 1 0 0; 1 1 0; 0 0 1; 0 1 1; 1 0 1; 1 1 1]
+    #Uniformly distributed random points in 3D 
+    if N < 9
+        N = N + 8
+    end
+    n_bnd = Int(floor(N/20))
+    n_inside = N-8*(n_bnd+1)
+
+    points = rand(Uniform(0,1),n_inside,3)
+
+    for j in 1:4
+        if j ≤ 2 
+            k = 1
+        elseif j > 2
+            k = 8
+        end
+        points_bnd = rand(Uniform(0,1),n_bnd,3)
+        [points_bnd[i,1] = bnd[k,1] for i in 1:n_bnd]
+        bnd = vcat(bnd,points_bnd)
+
+        points_bnd = rand(Uniform(0,1),n_bnd,3)
+        [points_bnd[i,2] = bnd[k,2] for i in 1:n_bnd]
+        bnd = vcat(bnd,points_bnd)
+
+        points_bnd = rand(Uniform(0,1),n_bnd,3)
+        [points_bnd[i,3] = bnd[k,3] for i in 1:n_bnd]
+        bnd = vcat(bnd,points_bnd)
+    end
+
+    points = vcat(points,bnd)
+    return points 
+
+end
+

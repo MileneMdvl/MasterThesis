@@ -54,7 +54,7 @@ function UniqueList(list)
             deleteat!(unique_list,ind)
         end
     end
-    return unique_list
+    return unique!(unique_list)
 end
 
 "
@@ -289,20 +289,35 @@ Output:
     |̂e| Float
     lengths of the dual edge to e 
 
-This function calls Adjacent, Circumcentre and Circumradius (if e is a boundary face)
+This function calls Adjacent, Circumcentre and Circumradius (if e is a boundary face). For the 3D case, for a boundary face e, we first compute the height of the tetrahedron formed by face e and the circumcentre, and we double it (also done in 2D case, but it is more straightforward to compute)
 "
 function DualEdge(e)
     #Get the labels for the two adjacent cells  
+    d = length(e)
     adj = Adjacent(e)
     K, L = adj[1,:], adj[2,:]
+    #Get the circumcentres of the adjacent triangles 
+    cK = Circumcentre(K)
     #If e is a boundary face, then by definition of Adjacent(e), L = 0 
     #Then, dual edge is computed differently (see thesis)
     if e ∈ boundary_list
         R = Circumradius(K)
-        dual = 2 * sqrt(R^2 - Volume(e)^2 / 4)
+        if d == 2
+            dual = 2 * sqrt(R^2 - Volume(e)^2 / 4)
+        elseif d == 3 
+            #half of the dual edge is the height of the new tetrahedron formed
+            #by face e and by the circumradius 
+            Tet = zeros(4,d)
+            for i = 1:3
+                Tet[i,:] = vertex_list[e[i]]
+            end
+            Tet[4,:] = cK
+            VolTet = VolumeTetrahedron(Tet[1,:],Tet[2,:],Tet[3,:],Tet[4,:])
+            Surface = Volume(e)
+            h = VolTet/Surface * 3 
+            dual = 2*h 
+        end
     else
-        #Get the circumcentres of the adjacent triangles 
-        cK = Circumcentre(K)
         cL = Circumcentre(L)
         dual = LinearAlgebra.norm(cK - cL) 
     end
@@ -323,6 +338,28 @@ Output:
 
 This functions is required to speed up computations when finding the faces on the boundary of a given cell. It uses the dictionaries vc_info and cf_info. These dictionaries are defined in the main file (here: 2d_mesh_test.jl)
 "
+# function FacesInd(K)
+#     #Get the number of vertices that make up K 
+#     nK = length(K) 
+    
+#     #Find the vertices a,b,c such that K = [a,b,c]
+#     #First, find the vertices a,b, and intersect their cell info to get the
+#     #index of the face [a,b]
+#     vc_a = vc_info[K[1]]
+#     vc_b = vc_info[K[2]]
+#     inter = intersect(vc_a,vc_b)
+#     #Then, find the vertex c and intersect to find the indices of [a,c] and [b,c]
+#     vc_c = vc_info[K[3]]
+#     inter = intersect(inter,vc_c)
+
+#     if nK == 4
+#         #If K is a tetrahedron then proceed once again 
+#         vc_d = vc_info[K[4]]
+#         inter = intersect(inter,vc_d)
+#     end
+
+#     return cf_info[inter[1]]
+# end
 function FacesInd(K)
     #Get the number of vertices that make up K 
     nK = length(K) 
@@ -332,18 +369,22 @@ function FacesInd(K)
     #index of the face [a,b]
     vc_a = vc_info[K[1]]
     vc_b = vc_info[K[2]]
-    inter = intersect(vc_a,vc_b)
     #Then, find the vertex c and intersect to find the indices of [a,c] and [b,c]
     vc_c = vc_info[K[3]]
-    inter = intersect(inter,vc_c)
+    if nK == 3
+        index = intersect(vc_a,vc_b,vc_c)[1]
 
-    if nK == 4
-        #If K is a tetrahedron then proceed once again 
+    elseif nK == 4
+        #If K is a tetrahedron then proceed a bit differently 
+        index = 2
         vc_d = vc_info[K[4]]
-        inter = intersect(inter,vc_d)
+        inter1 = intersect(vc_a,vc_b,vc_c)
+        inter2 = intersect(vc_a,vc_c,vc_d)
+        inter3 = intersect(vc_a,vc_b,vc_d)
+        inter4 = intersect(vc_b,vc_c,vc_d)
+        index = union(inter1,inter2,inter3,inter4)[1]
     end
-
-    return cf_info[inter[1]]
+    return cf_info[index]
 end
 
 #Function Faces
@@ -366,7 +407,7 @@ This function calls FacesInd.
 "
 function Faces(K)
     d = length(K) - 1
-    e_K = zeros(Int,d+1,2)
+    e_K = zeros(Int,d+1,d)
 
     faces_ind = FacesInd(K)
     for i in eachindex(faces_ind)
